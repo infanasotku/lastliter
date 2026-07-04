@@ -80,3 +80,7 @@ class StationService:
         return SyncStationResult(
             new=inserted_stations,
         )
+
+    async def run_ingestion_loop(self) -> None:
+        while True:
+            logger.info("pop")

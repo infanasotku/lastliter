@@ -1,326 +1,81 @@
-# AGENTS.md — lastliter
+# AGENTS.md - lastliter
 
-## 🧠 Project Overview
+## Project Focus
 
-lastliter is a geospatial + temporal analytics service for fuel stations.
+lastliter predicts when to visit a specific fuel station to avoid queues or fuel
+unavailability.
 
-The core goal of the system is:
+This is a historical and predictive analytics service based on crowd-sourced
+observations, not a real-time map app. Real-time snapshots are useful context,
+but the main product value comes from event history, state transitions, and
+uncertainty-aware recommendations.
 
-> Predict the optimal time to visit a fuel station to minimize waiting time and avoid queues or fuel unavailability.
+## Read First
 
-This is NOT a real-time map app.
-This is a historical + predictive analytics system based on crowd-sourced observations.
+- Source API examples and payload shapes live in `sources/`:
+  - `sources/stations.md` - station registry / dimension data.
+  - `sources/nearby.md` - geospatial current snapshot for map/current-state UX.
+  - `sources/comments.md` - station-level current aggregate and confidence data.
+  - `sources/recent_comments.md` - per-station event stream; primary analytics input.
+- Ingestion architecture lives in `docs/ingestion_loop.md`.
 
----
+Check these docs before changing ingestion, normalization, analytics contracts, or
+source-specific parsing.
 
-## 🎯 Product Goal
+## Core Model
 
-The main user question:
+- `stations` is the dimension table.
+- `station_events` is the append-only fact stream derived directly from
+  `/api/comments/{station_id}/recent`.
+- Analytics should work from normalized raw events, not from an invented
+  intermediate event layer.
+- Current-state endpoints such as `/api/nearby` and `/api/comments/{station_id}`
+  should not be treated as historical truth.
 
-> "When should I go to this specific gas station to avoid queues?"
+## State And Metrics
 
-The system should answer:
+Station status should be interpreted as state over time:
 
-- Best time windows (hour/day of week)
-- Worst time windows
-- Current probability of queue or fuel availability
-- Confidence level of prediction
+- `yes` -> available
+- `low` -> low fuel
+- `queue` -> queue
+- `no` -> no fuel
 
----
+Primary analytics questions:
 
-## 📊 Available Data Sources
+- What state transitions happened before and after congestion?
+- How long do queue or outage states usually last?
+- What patterns repeat by station, weekday, and hour?
+- How reliable and fresh are the observations?
 
-We aggregate data from `gdebenz.ru` APIs.
+Core metrics are `queue_probability`, `fuel_unavailability_probability`,
+`average_event_duration`, `confidence_score`, and `sample_count`.
 
----
+## Ingestion Rules
 
-### 1. Station Registry (`/api/stations`)
+Follow `docs/ingestion_loop.md`:
 
-Static reference data about fuel stations.
+- Postgres decides what and when to fetch.
+- Workers execute fetches and stay stateless about scheduling.
+- ClickHouse stores immutable event history.
+- Scheduling feedback updates Postgres after ingestion.
+- Multi-worker ingestion must remain safe via locked station selection.
 
-Contains:
+## Product Rules
 
-- station id (OSM-based)
-- name
-- brand
-- location (lat/lon)
-- address
-- available fuel types
-- basic status flags
+- Always expose uncertainty and data sparsity.
+- Lower confidence when samples are sparse, stale, contradictory, or unreliable.
+- Prefer best/worst time windows over fake precise predictions.
+- MVP output should include 2-3 best windows, worst windows, and confidence.
 
-Purpose:
+## Agent Mental Model
 
-- entity resolution (station identity)
-- geospatial indexing
-- joining key for all other datasets
+Think in terms of station behavior over time:
 
----
+- state transitions
+- weekly/hourly repetition
+- observation reliability
+- confidence under noisy crowd-sourced data
 
-### 2. Nearby Snapshot (`/api/nearby`)
-
-Geospatial real-time snapshot relative to a user query.
-
-Contains:
-
-- station status (yes / no / queue / low)
-- distance to user
-- fuel availability
-- confidence signals
-- confirmations count
-- last update timestamp
-
-Purpose:
-
-- UI layer (map view)
-- "what is happening right now"
-- low-latency state representation
-
-IMPORTANT:
-This is NOT historical data.
-It is a query-time projection.
-
----
-
-### 3. Station Comments Summary (`/api/comments/{station_id}`)
-
-Aggregated station-level state.
-
-Contains:
-
-- current status
-- confirmations (total / fresh)
-- fuel availability snapshot
-- confidence base score
-- conflict signals
-- metadata
-
-Purpose:
-
-- current state estimation of a station
-- input for reliability scoring
-- normalization layer for noisy reports
-
----
-
-### 4. Station Event History (`/api/comments/{station_id}/recent`)
-
-Time-ordered event stream per station.
-
-Each event contains:
-
-- status (yes / no / queue / low)
-- timestamp (created_at)
-- author reliability flag
-- on-site indicator
-- textual detail (free-form)
-
-Purpose:
-
-- core dataset for analytics
-- time-series modeling
-- detection of:
-  - queue duration
-  - fuel outage cycles
-  - state transitions
-
-This is the MOST IMPORTANT dataset for predictive modeling.
-
----
-
-## 🧱 Data Model Concept
-
-We treat the system as:
-
-### Dimension table:
-
-- stations
-
-### Fact/event stream:
-
-- station_events (directly from `/api/comments/{station_id}/recent`)
-
-IMPORTANT:
-There is no intermediate normalization layer between raw events and analytics.
-
----
-
-## 🔄 Key Concept: State Transitions
-
-We model station behavior as state changes over time:
-
-Possible states:
-
-- `available`
-- `low_fuel`
-- `queue`
-- `no_fuel`
-
-Transitions are derived directly from event history.
-
-Example:
-
-- available → queue → available
-- available → low → no → available
-
-These transitions are used to compute:
-
-- duration distributions
-- frequency of congestion
-- time-based patterns
-
----
-
-## 📈 Core Metrics
-
-For each station + weekday + hour:
-
-- queue_probability
-- fuel_unavailability_probability
-- average_event_duration
-- confidence_score
-- sample_count
-
----
-
-## 🧠 Prediction Strategy (MVP)
-
-No ML required initially.
-
-We use:
-
-- historical aggregation
-- weighted probabilities
-- recency decay
-- confidence scoring based on sample size
-
-Scoring idea:
-
-- availability weight: +0.6
-- queue penalty: -0.3
-- freshness: +0.1
-
----
-
-## 🏗️ Storage (ClickHouse)
-
-ClickHouse is used as the main analytics engine.
-
-Expected tables:
-
-### stations
-
-Static dimension table
-
-### station_events
-
-Raw normalized events from `/api/comments/{station_id}/recent`
-
-Fields:
-
-- station_id
-- timestamp
-- status
-- author_reliable
-- on_site
-- raw_detail
-
-### station_hourly_aggregates
-
-Precomputed stats per:
-
-- station_id
-- weekday
-- hour
-
----
-
-## ⚠️ Data Quality Notes
-
-- User-generated data is noisy
-- Some authors are unreliable
-- Reports may contradict each other
-- Some stations have sparse data
-
-Therefore:
-
-- Always compute confidence score
-- Always expose data sparsity
-- Never present predictions as absolute truth
-
----
-
-## 🧩 System Components
-
-### 1. Collector
-
-- Fetches API data periodically
-- Normalizes events (no intermediate event layer)
-- Writes directly to ClickHouse
-
-### 2. Analytics layer
-
-- Aggregations (hour/day patterns)
-- State transition extraction
-- Confidence scoring
-
-### 3. API service
-
-- Provides:
-  - station prediction
-  - heatmaps
-  - current state
-  - best time windows
-
-### 4. Frontend (optional MVP)
-
-- Map view
-- Station card
-- Time recommendation view
-
----
-
-## 🧪 Important Design Principle
-
-This project prioritizes:
-
-> uncertainty-aware recommendation
-
-Not:
-
-> fake precision
-
-If data is insufficient:
-
-- explicitly say so
-- reduce confidence
-- avoid overfitting patterns
-
----
-
-## 🚀 Definition of Done (MVP)
-
-MVP is complete when:
-
-- historical data is collected for ≥ 30 days
-- hourly patterns can be computed per station
-- system can output:
-  - best 2–3 time windows per station
-  - worst time windows
-  - confidence score
-
----
-
-## 🧠 Mental Model for Agents
-
-When working on this project, always think:
-
-- What is the state of a station over time?
-- What transitions happened before and after congestion?
-- How reliable is this observation?
-- What pattern repeats weekly?
-
-NOT:
-
-- just latest snapshot
-- just map rendering
-- just storing API responses
+Do not optimize only for latest snapshots, map rendering, or storing upstream
+responses without analytics value.
