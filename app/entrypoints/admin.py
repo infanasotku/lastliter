@@ -19,7 +19,7 @@ def create_app() -> FastAPI:
     container = Container()
     container.wire(
         packages=[
-            "app.controllers.admin",
+            "app.controllers.admin.views",
         ]
     )
     settings = container.settings()

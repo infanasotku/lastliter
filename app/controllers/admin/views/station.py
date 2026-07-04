@@ -1,11 +1,14 @@
+from dependency_injector.wiring import Provide, inject
 from sqladmin import ModelView, action, expose
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 from wtforms import FloatField, Form
 from wtforms.validators import InputRequired, NumberRange
 
+from app.container import Container
 from app.dto.station import SyncStationCmd
 from app.infra.postgres.models.station import Station
+from app.services.station import StationService
 
 
 class StationSyncForm(Form):
@@ -82,9 +85,14 @@ class StationView(ModelView, model=Station):
             },
         )
 
-    async def sync_stations(self, cmd: SyncStationCmd) -> None:
-        # Integration point for StationService.sync_stations(cmd).
-        _ = cmd
+    @inject
+    async def sync_stations(
+        self,
+        cmd: SyncStationCmd,
+        #
+        svc: StationService = Provide[Container.station_service],
+    ) -> None:
+        await svc.sync_stations(cmd)
 
     def _build_sync_stations_cmd(self, form: StationSyncForm) -> SyncStationCmd:
         if form.lat1.data is None or form.lon1.data is None or form.lat2.data is None or form.lon2.data is None:
