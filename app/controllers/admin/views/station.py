@@ -6,7 +6,8 @@ from wtforms import FloatField, Form
 from wtforms.validators import InputRequired, NumberRange
 
 from app.container import Container
-from app.dto.station import SyncStationCmd
+from app.dto.station import StartSyncStationCmd
+from app.infra.common.correlation import get_request_context
 from app.infra.postgres.models.station import Station
 from app.services.station import StationService
 
@@ -92,21 +93,23 @@ class StationView(ModelView, model=Station):
     @inject
     async def sync_stations(
         self,
-        cmd: SyncStationCmd,
+        cmd: StartSyncStationCmd,
         #
         svc: StationService = Provide[Container.station_service],
     ) -> None:
-        await svc.sync_stations(cmd)
+        await svc.start_sync_stations(cmd)
 
-    def _build_sync_stations_cmd(self, form: StationSyncForm) -> SyncStationCmd:
+    def _build_sync_stations_cmd(self, form: StationSyncForm) -> StartSyncStationCmd:
         if form.lat1.data is None or form.lon1.data is None or form.lat2.data is None or form.lon2.data is None:
             raise ValueError("Station sync form is missing required coordinates")
 
-        return SyncStationCmd(
+        ctx = get_request_context()
+        return StartSyncStationCmd(
             lat1=form.lat1.data,
             lon1=form.lon1.data,
             lat2=form.lat2.data,
             lon2=form.lon2.data,
+            correlation_id=ctx.request_id,
         )
 
     def _sync_stations_url(self, request: Request) -> str:

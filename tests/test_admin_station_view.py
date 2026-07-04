@@ -7,7 +7,8 @@ from starlette.datastructures import URL as StarletteURL
 from starlette.datastructures import FormData
 
 from app.controllers.admin.views.station import StationSyncForm, StationView
-from app.dto.station import SyncStationCmd
+from app.dto.station import StartSyncStationCmd
+from app.infra.common.correlation import RequestContext, with_request_context
 
 
 def make_request(*, method: str = "GET", form: FormData | None = None) -> MagicMock:
@@ -84,14 +85,16 @@ class TestStationViewSyncStationsForm:
             ),
         )
 
-        response = await view.sync_stations_form(request)
+        with with_request_context(RequestContext(request_id="request-id")):
+            response = await view.sync_stations_form(request)
 
         view.sync_stations.assert_awaited_once_with(
-            SyncStationCmd(
+            StartSyncStationCmd(
                 lat1=55.1,
                 lon1=82.2,
                 lat2=56.3,
                 lon2=83.4,
+                correlation_id="request-id",
             )
         )
         request.url_for.assert_called_with("admin:list", identity="station")
@@ -138,13 +141,15 @@ class TestStationViewBuildSyncStationsCmd:
         )
         assert form.validate()
 
-        cmd = StationView()._build_sync_stations_cmd(form)
+        with with_request_context(RequestContext(request_id="request-id")):
+            cmd = StationView()._build_sync_stations_cmd(form)
 
-        assert cmd == SyncStationCmd(
+        assert cmd == StartSyncStationCmd(
             lat1=55.1,
             lon1=82.2,
             lat2=56.3,
             lon2=83.4,
+            correlation_id="request-id",
         )
 
     def test_raises_when_form_data_is_missing(self):

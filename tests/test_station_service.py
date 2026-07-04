@@ -3,7 +3,7 @@ from mock import AsyncMock, MagicMock
 from pytest import fixture
 
 from app.domains.station import Station
-from app.dto.station import SyncStationCmd, SyncStationResult
+from app.dto.station import StartSyncStationCmd, SyncStationCmd, SyncStationResult
 from app.services.station import StationService
 
 
@@ -123,3 +123,35 @@ class TestStationServiceSyncStations:
 
         assert result == SyncStationResult(new=0)
         station_ctx.stations.insert_many_safe.assert_awaited_once_with([])
+
+
+class TestStationServiceStartSyncStations:
+    @pytest.mark.asyncio
+    async def test_schedules_sync_task_with_plain_request_payload(
+        self,
+        svc: StationService,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        apply_async = MagicMock()
+        monkeypatch.setattr("app.controllers.tasks.station.sync_stations_task.apply_async", apply_async)
+        cmd = StartSyncStationCmd(
+            lat1=55,
+            lon1=82,
+            lat2=56,
+            lon2=83,
+            correlation_id="request-id",
+        )
+
+        await svc.start_sync_stations(cmd)
+
+        apply_async.assert_called_once_with(
+            kwargs={
+                "req": {
+                    "lat1": 55.0,
+                    "lon1": 82.0,
+                    "lat2": 56.0,
+                    "lon2": 83.0,
+                }
+            },
+            task_id="request-id",
+        )

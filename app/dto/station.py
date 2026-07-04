@@ -9,5 +9,9 @@ class SyncStationCmd(BaseModel):
     lon2: float
 
 
+class StartSyncStationCmd(SyncStationCmd):
+    correlation_id: str
+
+
 class SyncStationResult(BaseModel):
     new: int
