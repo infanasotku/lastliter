@@ -1,0 +1,29 @@
+{% extends "sqladmin/layout.html" %}
+{% from 'sqladmin/_macros.html' import render_form_fields %}
+
+{% block content %}
+<div class="col-12">
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">Sync stations</h3>
+    </div>
+    <div class="card-body border-bottom py-3">
+      <form action="{{ form_action_url }}" method="POST">
+        <fieldset class="form-fieldset">
+          {{ render_form_fields(form) }}
+        </fieldset>
+        <div class="row">
+          <div class="col-md-2">
+            <a href="{{ list_url }}" class="btn">
+              Cancel
+            </a>
+          </div>
+          <div class="col-md-6">
+            <input type="submit" name="sync" value="Sync" class="btn btn-primary">
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -4,8 +4,8 @@ from fastapi import FastAPI
 from sqladmin import Admin
 
 from app.container import Container
-from app.controllers.admin import views
 from app.controllers.admin.auth import AdminAuthenticationBackend
+from app.controllers.admin.views import station
 from app.controllers.api import middlewares
 from app.controllers.api import router as v1
 from app.infra.logging.logger import get_logger
@@ -57,8 +57,9 @@ def create_app() -> FastAPI:
             password=settings.admin.password,
         ),
         base_url="",
+        templates_dir="app/controllers/admin/templates",
     )
-    admin.add_view(views.StationView)
+    admin.add_view(station.StationView)
     logger.info("Admin panel registered")
 
     @app.get("/healthz", include_in_schema=False)
