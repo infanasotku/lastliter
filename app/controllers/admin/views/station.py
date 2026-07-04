@@ -55,6 +55,10 @@ class StationView(ModelView, model=Station):
     name = "Station"
     name_plural = "Stations"
 
+    column_list = "__all__"
+    column_details_list = column_list
+    page_size = 25
+
     @action(
         "sync-stations-form",
         label="Sync stations",

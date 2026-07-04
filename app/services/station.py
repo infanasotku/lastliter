@@ -21,4 +21,10 @@ class StationService:
             lat2=cmd.lat2,
             lon2=cmd.lon2,
         )
-        pass
+        filtered_stations = [s for s in stations if s.address != "" and s.name != ""]
+        async with self._uow.begin(write=True) as uow:
+            inserted_stations = await uow.stations.insert_many_safe(filtered_stations)
+
+        return SyncStationResult(
+            new=inserted_stations,
+        )
