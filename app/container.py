@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.infra.config import generate_settings
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.postgres import create_engine
+from app.infra.postgres.uows import PgStationUnitOfWork
 from app.services.station import StationService
 
 
@@ -16,9 +17,16 @@ class Container(containers.DeclarativeContainer):
     read_sessionmaker = providers.Singleton(async_sessionmaker[AsyncSession], read_engine)
     write_sessionmaker = providers.Singleton(async_sessionmaker[AsyncSession], write_engine)
 
+    station_uow = providers.Factory(
+        PgStationUnitOfWork,
+        read_sessionmaker=read_sessionmaker,
+        write_sessionmaker=write_sessionmaker,
+    )
+
     gdebenz = providers.Singleton(HTTPGdeBenzClient)
 
     station_service = providers.Factory(
         StationService,
+        station_uow,
         gdebenz=gdebenz,
     )
