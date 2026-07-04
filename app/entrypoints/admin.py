@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from sqladmin import Admin
 
 from app.container import Container
+from app.controllers.admin import views
 from app.controllers.admin.auth import AdminAuthenticationBackend
 from app.controllers.api import middlewares
 from app.controllers.api import router as v1
@@ -46,7 +47,7 @@ def create_app() -> FastAPI:
     logger.info("Middleware configured")
 
     logger.info("Creating admin panel")
-    Admin(
+    admin = Admin(
         app,
         engine,
         title="Last liter admin",
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
         ),
         base_url="",
     )
+    admin.add_view(views.StationView)
     logger.info("Admin panel registered")
 
     @app.get("/healthz", include_in_schema=False)
