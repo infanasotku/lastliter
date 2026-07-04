@@ -1,0 +1,10 @@
+dependency_injector==4.48.3
+uvicorn==0.41.0
+PyYAML==6.0.3
+dotenv==0.9.9
+pydantic_settings==2.13.1
+pydantic==2.12.5
+sqlalchemy[asyncio]==2.0.48
+asyncpg==0.31.0
+alembic==1.18.4
+fastapi==0.135.1
