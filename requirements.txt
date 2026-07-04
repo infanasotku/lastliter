@@ -9,3 +9,5 @@ asyncpg==0.31.0
 alembic==1.18.4
 fastapi==0.135.1
 httpx[http2]==0.28.1
+sqladmin==0.23.0
+itsdangerous==2.2.0
