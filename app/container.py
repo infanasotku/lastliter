@@ -5,11 +5,18 @@ from app.infra.config import generate_settings
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.postgres import create_engine
 from app.infra.postgres.uows import PgStationUnitOfWork
+from app.infra.redis import create_redis_context
 from app.services.station import StationService
 
 
 class Container(containers.DeclarativeContainer):
     settings = providers.Singleton(generate_settings)
+
+    # Redis
+    redis = providers.Resource(
+        create_redis_context,
+        settings.provided.redis,
+    )
 
     # Postgres
     read_engine = providers.Singleton(create_engine, settings.provided.postgres, tx=False)

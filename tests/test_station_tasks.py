@@ -34,6 +34,15 @@ class TestSyncStationsTask:
         )
         runtime.run.assert_called_once_with("coroutine")
 
+    def test_worker_app_registers_station_task(self):
+        from app.entrypoints.worker import create_app
+
+        app = create_app()
+
+        app.loader.import_default_modules()
+
+        assert "app.controllers.tasks.station.sync_stations_task" in app.tasks
+
 
 class TestSyncStations:
     @pytest.mark.asyncio

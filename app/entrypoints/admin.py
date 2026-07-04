@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+from celery import Celery
 from fastapi import FastAPI
 from sqladmin import Admin
 
@@ -24,6 +25,12 @@ def create_app() -> FastAPI:
     )
     settings = container.settings()
     engine = container.read_engine()
+
+    Celery(
+        "control-worker",
+        broker=str(settings.rabbitmq.dsn),
+        backend=str(settings.redis.dsn),
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):

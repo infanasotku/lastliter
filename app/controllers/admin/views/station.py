@@ -8,8 +8,11 @@ from wtforms.validators import InputRequired, NumberRange
 from app.container import Container
 from app.dto.station import StartSyncStationCmd
 from app.infra.common.correlation import get_request_context
+from app.infra.logging import get_logger
 from app.infra.postgres.models.station import Station
 from app.services.station import StationService
+
+logger = get_logger().getChild(__name__)
 
 
 class StationSyncForm(Form):
@@ -74,8 +77,21 @@ class StationView(ModelView, model=Station):
 
         if request.method == "POST" and form.validate():
             cmd = self._build_sync_stations_cmd(form)
+            logger.info(
+                f"Admin requested station sync for bounds ({cmd.lat1}, {cmd.lon1}) - ({cmd.lat2}, {cmd.lon2})",
+                extra={
+                    "correlation_id": cmd.correlation_id,
+                    "lat1": cmd.lat1,
+                    "lon1": cmd.lon1,
+                    "lat2": cmd.lat2,
+                    "lon2": cmd.lon2,
+                },
+            )
             await self.sync_stations(cmd)
             return RedirectResponse(self._stations_list_url(request), status_code=303)
+
+        if request.method == "POST":
+            logger.warning(f"Admin station sync form validation failed: {form.errors}")
 
         return await self.templates.TemplateResponse(
             request,
