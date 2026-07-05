@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -25,7 +26,14 @@ def create_app() -> FastAPI:
 
         await _await(container.init_resources)  # type: ignore
 
-        t = asyncio.create_task(run_ingestion_loop())
+        async def _do():
+            try:
+                await run_ingestion_loop()
+            except Exception:
+                logger.exception("Error in ingestion loop")
+                sys.exit(1)
+
+        t = asyncio.create_task(_do())
         try:
             yield
         finally:

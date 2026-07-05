@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -15,3 +18,11 @@ class StartSyncStationCmd(SyncStationCmd):
 
 class SyncStationResult(BaseModel):
     new: int
+
+
+class RawStationObservation(BaseModel):
+    status: Literal["queue", "yes", "no", "low"]
+    detail: str
+    created_at: datetime
+    author_reliable: bool
+    on_site: bool

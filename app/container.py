@@ -2,10 +2,11 @@ from dependency_injector import containers, providers
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.infra.config import generate_settings
-from app.infra.http.gdebenz import HTTPGdeBenzClient
+from app.infra.http.gdebenz import create_gdebenz_client
 from app.infra.postgres import create_engine
 from app.infra.postgres.uows import PgStationUnitOfWork
 from app.infra.redis import create_redis_context
+from app.infra.redis.limit import RateLimiter
 from app.services.station import StationService
 
 
@@ -30,10 +31,12 @@ class Container(containers.DeclarativeContainer):
         write_sessionmaker=write_sessionmaker,
     )
 
-    gdebenz = providers.Singleton(HTTPGdeBenzClient)
+    gdebenz = providers.Resource(create_gdebenz_client)
+    limiter = providers.Singleton(RateLimiter)
 
     station_service = providers.Factory(
         StationService,
         station_uow,
         gdebenz=gdebenz,
+        limiter=limiter,
     )
