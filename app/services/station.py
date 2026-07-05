@@ -3,6 +3,7 @@ from uuid import uuid4
 from app.contracts.uow import UnitOfWork
 from app.domains.station import Station
 from app.dto.station import RawStationObservation, StartSyncStationCmd, SyncStationCmd, SyncStationResult
+from app.infra.clickhouse.repositories import StationContext
 from app.infra.common.time import now_utc
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging import get_logger
@@ -18,12 +19,14 @@ class StationService:
         self,
         uow: UnitOfWork[StationReadContext, StationWriteContext],
         *,
+        click_ctx: StationContext,
         gdebenz: HTTPGdeBenzClient,
         limiter: RateLimiter,
     ) -> None:
         self._uow = uow
         self._gdebenz = gdebenz
         self._limiter = limiter
+        self._click_ctx = click_ctx
 
     async def start_sync_stations(self, cmd: StartSyncStationCmd) -> None:
         from app.controllers.tasks.station import SyncStationRequest, sync_stations_task
