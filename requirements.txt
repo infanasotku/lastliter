@@ -13,3 +13,4 @@ sqladmin==0.23.0
 itsdangerous==2.2.0
 celery==5.6.3
 redis==7.4.0
+clickhouse_connect[async]==1.4.1

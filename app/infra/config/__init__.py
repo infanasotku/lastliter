@@ -2,10 +2,11 @@ import os
 from typing import Literal
 
 from dotenv import load_dotenv
-from pydantic import AmqpDsn, PostgresDsn, RedisDsn
+from pydantic import AmqpDsn, ClickHouseDsn, PostgresDsn, RedisDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.infra.config.admin import AdminSettings
+from app.infra.config.clickhouse import ClickhouseSettings
 from app.infra.config.postgres import PostgreSQLSettings
 from app.infra.config.rabbitmq import RabbitMQSettings
 from app.infra.config.redis import RedisSettings
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
     admin: AdminSettings
     redis: RedisSettings
     rabbitmq: RabbitMQSettings
+    clickhouse: ClickhouseSettings
 
     model_config = SettingsConfigDict(env_nested_delimiter="__")
 
@@ -33,6 +35,9 @@ class TestSettings(Settings):
     admin: AdminSettings = AdminSettings(username="admin", password="admin", secret="admin_secret")
     redis: RedisSettings = RedisSettings(dsn=RedisDsn("redis://localhost:6379/0"))
     rabbitmq: RabbitMQSettings = RabbitMQSettings(dsn=AmqpDsn("amqp://guest:guest@localhost:5672/"))
+    clickhouse: ClickhouseSettings = ClickhouseSettings(
+        dsn=ClickHouseDsn("clickhousedb://default:default@localhost:8123/default")
+    )
 
 
 def generate_settings():

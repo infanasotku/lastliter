@@ -1,6 +1,7 @@
 from dependency_injector import containers, providers
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.infra.clickhouse import create_clickhouse_client
 from app.infra.config import generate_settings
 from app.infra.http.gdebenz import create_gdebenz_client
 from app.infra.postgres import create_engine
@@ -29,6 +30,12 @@ class Container(containers.DeclarativeContainer):
         PgStationUnitOfWork,
         read_sessionmaker=read_sessionmaker,
         write_sessionmaker=write_sessionmaker,
+    )
+
+    # Clickhouse
+    clickhouse_client = providers.Resource(
+        create_clickhouse_client,
+        settings.provided.clickhouse,
     )
 
     gdebenz = providers.Resource(create_gdebenz_client)

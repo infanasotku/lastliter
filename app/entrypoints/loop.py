@@ -44,6 +44,8 @@ def create_app() -> FastAPI:
 
             logger.info("Disposing resources")
             await _await(container.shutdown_resources)  # type: ignore
+            await container.read_engine().dispose()
+            await container.write_engine().dispose()
 
     app = FastAPI(lifespan=lifespan)
     app.state.container = container
