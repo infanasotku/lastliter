@@ -8,5 +8,5 @@ CREATE TABLE station_observations_raw (
     on_site Bool,
     ingested_at DateTime64(3, 'UTC') DEFAULT now64(3),
     source LowCardinality(String) DEFAULT 'gdebenz'
-) ENGINE = MergeTree PARTITION BY toYYYYMM(observed_at)
+) ENGINE = ReplacingMergeTree PARTITION BY toYYYYMM(observed_at)
 ORDER BY (station_id, observed_at, observation_id);

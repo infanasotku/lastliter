@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from mock import AsyncMock, MagicMock
 from pytest import fixture
@@ -35,10 +37,27 @@ def gdebenz() -> MagicMock:
 
 
 @fixture()
-def svc(uow: MagicMock, gdebenz: MagicMock) -> StationService:
+def click_ctx() -> MagicMock:
+    ctx = MagicMock()
+    ctx.stations = MagicMock()
+    ctx.stations.insert_raw_observations = AsyncMock()
+    return ctx
+
+
+@fixture()
+def limiter() -> MagicMock:
+    limiter = MagicMock()
+    limiter.wait = AsyncMock()
+    return limiter
+
+
+@fixture()
+def svc(uow: MagicMock, click_ctx: MagicMock, gdebenz: MagicMock, limiter: MagicMock) -> StationService:
     return StationService(
         uow,
+        click_ctx=click_ctx,
         gdebenz=gdebenz,
+        limiter=limiter,
     )
 
 
@@ -54,6 +73,9 @@ def make_station(
         address=address,
         lat=55.1,
         lon=82.2,
+        last_fetched_at=datetime.min.replace(tzinfo=timezone.utc),
+        next_fetch_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        fetch_interval_sec=300,
     )
 
 

@@ -29,7 +29,7 @@ def upgrade() -> None:
     op.alter_column("stations", "next_fetch_at", nullable=False)
 
     op.add_column("stations", sa.Column("fetch_interval_sec", sa.Integer(), nullable=True))
-    op.execute("UPDATE stations SET fetch_interval_sec = 0")
+    op.execute("UPDATE stations SET fetch_interval_sec = 300")
     op.alter_column("stations", "fetch_interval_sec", nullable=False)
 
     op.add_column("stations", sa.Column("priority", sa.Integer(), nullable=True))

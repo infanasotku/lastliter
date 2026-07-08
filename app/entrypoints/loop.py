@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import sys
 from contextlib import asynccontextmanager
 
@@ -39,7 +40,8 @@ def create_app() -> FastAPI:
         finally:
             logger.info("Cancelling ingestion loop")
             t.cancel()
-            await t
+            with contextlib.suppress(asyncio.CancelledError):
+                await t
             logger.info("Ingestion loop cancelled")
 
             logger.info("Disposing resources")

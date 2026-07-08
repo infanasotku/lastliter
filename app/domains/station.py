@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 @dataclass
@@ -20,7 +20,7 @@ class Station:
             address=address,
             lat=lat,
             lon=lon,
-            last_fetched_at=datetime.min,
+            last_fetched_at=datetime.min.replace(tzinfo=timezone.utc),
             next_fetch_at=now,
             fetch_interval_sec=300,
             priority=0,

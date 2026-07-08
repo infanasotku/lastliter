@@ -9,6 +9,27 @@ class ClickStationRepository(ClickHouseRepository):
         if not observations:
             return
 
+        ids = [obs.id for obs in observations]
+        existing_result = await self._client.query(
+            f"""
+            SELECT observation_id
+            FROM {_OBS_TABLE}
+            WHERE observation_id IN ({",".join(str(obs_id) for obs_id in ids)})
+            """
+        )
+        existing_ids = {row[0] for row in existing_result.result_rows}
+        unique_observations = []
+        seen_ids = set(existing_ids)
+        for obs in observations:
+            if obs.id in seen_ids:
+                continue
+            seen_ids.add(obs.id)
+            unique_observations.append(obs)
+        observations = unique_observations
+
+        if not observations:
+            return
+
         rows = [
             (
                 obs.id,
