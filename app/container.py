@@ -51,4 +51,5 @@ class Container(containers.DeclarativeContainer):
         station_uow,
         gdebenz=gdebenz,
         limiter=limiter,
+        click_ctx=station_ctx,
     )

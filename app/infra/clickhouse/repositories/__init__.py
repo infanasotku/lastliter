@@ -1,5 +1,7 @@
 from typing import Protocol
 
+from clickhouse_connect.driver import AsyncClient
+
 from app.infra.clickhouse.repositories.station import ClickStationRepository
 
 
@@ -8,5 +10,5 @@ class StationContext(Protocol):
 
 
 class ClickStationContext(StationContext):
-    def __init__(self, client: ClickStationRepository) -> None:
-        self.stations = client
+    def __init__(self, client: AsyncClient) -> None:
+        self.stations = ClickStationRepository(client)

@@ -42,6 +42,10 @@ class PgStationWriteRepository(PgStationRepository):
                 "address": station.address,
                 "lat": station.lat,
                 "lon": station.lon,
+                "last_fetched_at": station.last_fetched_at,
+                "next_fetch_at": station.next_fetch_at,
+                "fetch_interval_sec": station.fetch_interval_sec,
+                "priority": station.priority,
             }
             for station in stations
         ]

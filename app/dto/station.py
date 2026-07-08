@@ -30,3 +30,4 @@ class RawStationObservation(BaseModel):
 
 class InsertObservation(RawStationObservation):
     id: int
+    station_id: str

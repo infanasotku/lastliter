@@ -22,7 +22,7 @@ class Station:
             lon=lon,
             last_fetched_at=datetime.min,
             next_fetch_at=now,
-            fetch_interval_sec=0,
+            fetch_interval_sec=300,
             priority=0,
         )
 

@@ -1,6 +1,5 @@
 import hashlib
 from itertools import chain
-from uuid import uuid4
 
 from app.contracts.uow import UnitOfWork
 from app.domains.station import Station
@@ -100,7 +99,7 @@ class StationService:
             new=inserted_stations,
         )
 
-    async def run_ingestion_loop(self) -> None:
+    async def run_ingestion_iteration(self) -> None:
         ITERATION_BATCH_SIZE = 10
         EVENTS_LIMIT_PER_STATION = 20
         LIMIT_KEY = KEY_PREFIX + "stations:fetch:limit"
@@ -131,25 +130,26 @@ class StationService:
                     created_at=raw.created_at,
                     author_reliable=raw.author_reliable,
                     on_site=raw.on_site,
+                    station_id=station.id,
                 )
 
             # Just unwraps the list of lists into a single chain of observations
-            obs = chain(*([_to_obs(o, station) for o in station_obs_dict.get(station.id, [])] for station in stations))
-            await self._click_ctx.stations.insert_raw_observations(list(obs))
+            obs_c = chain(
+                *([_to_obs(o, station) for o in station_obs_dict.get(station.id, [])] for station in stations)
+            )
+            obs = list(obs_c)
+            await self._click_ctx.stations.insert_raw_observations(obs)
 
             for station in stations:
                 obs = station_obs_dict.get(station.id, [])
                 station.update_fetch_info(now=now_utc(), observations_fetched=len(obs))
 
-        while True:
-            iteration_id = uuid4()
+        async with self._uow.begin(write=True) as ctx:
+            stations = await ctx.stations.get_stations_for_fetch_for_update(
+                now=now_utc(),
+                limit=ITERATION_BATCH_SIZE,
+            )
+            obs = await _fetch_observations(stations)
+            await _insert_observations(stations, obs)
 
-            async with self._uow.begin(write=True) as ctx:
-                stations = await ctx.stations.get_stations_for_fetch_for_update(
-                    now=now_utc(),
-                    limit=ITERATION_BATCH_SIZE,
-                )
-                obs = await _fetch_observations(stations)
-                await _insert_observations(stations, obs)
-
-                await ctx.stations.update_stations(stations)
+            await ctx.stations.update_stations(stations)
