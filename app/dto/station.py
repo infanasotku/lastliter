@@ -26,3 +26,7 @@ class RawStationObservation(BaseModel):
     created_at: datetime
     author_reliable: bool
     on_site: bool
+
+
+class InsertObservation(RawStationObservation):
+    id: int

@@ -1,8 +1,16 @@
+import hashlib
+from itertools import chain
 from uuid import uuid4
 
 from app.contracts.uow import UnitOfWork
 from app.domains.station import Station
-from app.dto.station import RawStationObservation, StartSyncStationCmd, SyncStationCmd, SyncStationResult
+from app.dto.station import (
+    InsertObservation,
+    RawStationObservation,
+    StartSyncStationCmd,
+    SyncStationCmd,
+    SyncStationResult,
+)
 from app.infra.clickhouse.repositories import StationContext
 from app.infra.common.time import now_utc
 from app.infra.http.gdebenz import HTTPGdeBenzClient
@@ -109,11 +117,29 @@ class StationService:
 
             return station_obs_dict
 
-        async def _process_observations(
+        async def _insert_observations(
             stations: list[Station], station_obs_dict: dict[str, list[RawStationObservation]]
         ) -> None:
+            def _to_obs(raw: RawStationObservation, station: Station) -> InsertObservation:
+                hash_target = f"{station.id}|{raw.created_at.isoformat()}|{raw.status}|{raw.detail}"
+                ob_id = int(hashlib.md5(hash_target.encode()).hexdigest()[:16], 16)
+
+                return InsertObservation(
+                    id=ob_id,
+                    status=raw.status,
+                    detail=raw.detail,
+                    created_at=raw.created_at,
+                    author_reliable=raw.author_reliable,
+                    on_site=raw.on_site,
+                )
+
+            # Just unwraps the list of lists into a single chain of observations
+            obs = chain(*([_to_obs(o, station) for o in station_obs_dict.get(station.id, [])] for station in stations))
+            await self._click_ctx.stations.insert_raw_observations(list(obs))
+
             for station in stations:
                 obs = station_obs_dict.get(station.id, [])
+                station.update_fetch_info(now=now_utc(), observations_fetched=len(obs))
 
         while True:
             iteration_id = uuid4()
@@ -124,4 +150,6 @@ class StationService:
                     limit=ITERATION_BATCH_SIZE,
                 )
                 obs = await _fetch_observations(stations)
-                await _process_observations(stations, obs)
+                await _insert_observations(stations, obs)
+
+                await ctx.stations.update_stations(stations)

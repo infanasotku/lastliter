@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import literal, select
+from sqlalchemy import literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.domains.station import Station
@@ -68,3 +68,20 @@ class PgStationWriteRepository(PgStationRepository):
         )
         stations = await self._session.scalars(stmt)
         return [_to_domain(station) for station in stations]
+
+    async def update_stations(self, stations: Sequence[Station]) -> None:
+        if not stations:
+            return
+
+        vals = [
+            {
+                "id": station.id,
+                "last_fetched_at": station.last_fetched_at,
+                "next_fetch_at": station.next_fetch_at,
+                "fetch_interval_sec": station.fetch_interval_sec,
+            }
+            for station in stations
+        ]
+
+        stmt = update(StationModel)
+        await self._session.execute(stmt, params=vals)

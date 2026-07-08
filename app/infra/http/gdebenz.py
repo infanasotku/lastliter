@@ -8,7 +8,7 @@ from app.domains.station import Station
 from app.dto.station import RawStationObservation
 from app.infra.common.time import now_utc
 
-BASE_URL = "https://gdebenz.ru/api"
+BASE_URL = "https://www.gdebenz.ru/api"
 STATIONS_PATH = "/stations"
 EVENTS_PATH = "/comments/{id}/recent?limit={limit}"
 
