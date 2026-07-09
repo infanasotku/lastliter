@@ -33,6 +33,7 @@ def uow(station_ctx: MagicMock) -> MagicMock:
 def gdebenz() -> MagicMock:
     client = MagicMock()
     client.get_stations = AsyncMock()
+    client.get_obs_by_id = AsyncMock()
     return client
 
 
@@ -177,3 +178,44 @@ class TestStationServiceStartSyncStations:
             },
             task_id="request-id",
         )
+
+
+class TestStationServiceRunIngestionIteration:
+    @pytest.mark.asyncio
+    async def test_returns_false_when_no_stations_are_due(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+        limiter: MagicMock,
+    ):
+        station_ctx.stations.get_stations_for_fetch_for_update = AsyncMock(return_value=[])
+        station_ctx.stations.update_stations = AsyncMock()
+
+        has_work = await svc.run_ingestion_iteration()
+
+        assert has_work is False
+        limiter.wait.assert_not_awaited()
+        gdebenz.get_obs_by_id.assert_not_awaited()
+        click_ctx.stations.insert_raw_observations.assert_not_awaited()
+        station_ctx.stations.update_stations.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_due_stations_are_processed(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        station = make_station("station-1")
+        station_ctx.stations.get_stations_for_fetch_for_update = AsyncMock(return_value=[station])
+        station_ctx.stations.update_stations = AsyncMock()
+        gdebenz.get_obs_by_id = AsyncMock(return_value=[])
+
+        has_work = await svc.run_ingestion_iteration()
+
+        assert has_work is True
+        click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
+        station_ctx.stations.update_stations.assert_awaited_once_with([station])
