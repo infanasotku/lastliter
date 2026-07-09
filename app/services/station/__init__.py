@@ -1,5 +1,6 @@
 from app.contracts.uow import UnitOfWork
 from app.dto.station import (
+    RunIngestionIterationCmd,
     StartSyncStationCmd,
     SyncStationCmd,
     SyncStationResult,
@@ -92,10 +93,10 @@ class StationService:
             new=inserted_stations,
         )
 
-    async def run_ingestion_iteration(self) -> bool:
+    async def run_ingestion_iteration(self, cmd: RunIngestionIterationCmd) -> bool:
         return await RunIngestionIterationUC(
             uow=self._uow,
             click_ctx=self._click_ctx,
             gdebenz=self._gdebenz,
             limiter=self._limiter,
-        ).run()
+        ).run(cmd)

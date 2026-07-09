@@ -4,6 +4,7 @@ import pytest
 from mock import AsyncMock, MagicMock
 
 from app.controllers.loop import station
+from app.dto.station import RunIngestionIterationCmd
 
 
 class TestRunIngestionLoop:
@@ -18,4 +19,7 @@ class TestRunIngestionLoop:
             await station.run_ingestion_loop(svc=svc)
 
         svc.run_ingestion_iteration.assert_awaited_once()
+        cmd = svc.run_ingestion_iteration.await_args.args[0]
+        assert isinstance(cmd, RunIngestionIterationCmd)
+        assert cmd.owner
         sleep.assert_awaited_once_with(station.IDLE_SLEEP_SECONDS)

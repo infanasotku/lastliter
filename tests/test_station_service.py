@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
-from mock import AsyncMock, MagicMock
+from mock import ANY, AsyncMock, MagicMock
 from pytest import fixture
 
 from app.domains.station import Station
-from app.dto.station import StartSyncStationCmd, SyncStationCmd, SyncStationResult
+from app.dto.station import RunIngestionIterationCmd, StartSyncStationCmd, SyncStationCmd, SyncStationResult
 from app.services.station import StationService
 
 
@@ -190,16 +190,22 @@ class TestStationServiceRunIngestionIteration:
         gdebenz: MagicMock,
         limiter: MagicMock,
     ):
-        station_ctx.stations.get_stations_for_fetch_for_update = AsyncMock(return_value=[])
-        station_ctx.stations.update_stations = AsyncMock()
+        station_ctx.stations.claim_stations = AsyncMock(return_value=[])
+        station_ctx.stations.update_claimed_stations = AsyncMock()
 
-        has_work = await svc.run_ingestion_iteration()
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
 
         assert has_work is False
+        station_ctx.stations.claim_stations.assert_awaited_once_with(
+            now=ANY,
+            limit=10,
+            owner="worker-1",
+            claim_for=timedelta(minutes=5),
+        )
         limiter.wait.assert_not_awaited()
         gdebenz.get_obs_by_id.assert_not_awaited()
         click_ctx.stations.insert_raw_observations.assert_not_awaited()
-        station_ctx.stations.update_stations.assert_not_awaited()
+        station_ctx.stations.update_claimed_stations.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_returns_true_when_due_stations_are_processed(
@@ -210,12 +216,18 @@ class TestStationServiceRunIngestionIteration:
         gdebenz: MagicMock,
     ):
         station = make_station("station-1")
-        station_ctx.stations.get_stations_for_fetch_for_update = AsyncMock(return_value=[station])
-        station_ctx.stations.update_stations = AsyncMock()
+        station_ctx.stations.claim_stations = AsyncMock(return_value=[station])
+        station_ctx.stations.update_claimed_stations = AsyncMock(return_value=1)
         gdebenz.get_obs_by_id = AsyncMock(return_value=[])
 
-        has_work = await svc.run_ingestion_iteration()
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
 
         assert has_work is True
+        station_ctx.stations.claim_stations.assert_awaited_once_with(
+            now=ANY,
+            limit=10,
+            owner="worker-1",
+            claim_for=timedelta(minutes=5),
+        )
         click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
-        station_ctx.stations.update_stations.assert_awaited_once_with([station])
+        station_ctx.stations.update_claimed_stations.assert_awaited_once_with([station], owner="worker-1")

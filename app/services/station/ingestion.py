@@ -1,4 +1,5 @@
 import hashlib
+from datetime import timedelta
 from itertools import chain
 
 from app.contracts.uow import UnitOfWork
@@ -6,6 +7,7 @@ from app.domains.station import Station
 from app.dto.station import (
     InsertObservation,
     RawStationObservation,
+    RunIngestionIterationCmd,
 )
 from app.infra.clickhouse.repositories import StationContext
 from app.infra.common.time import now_utc
@@ -19,6 +21,7 @@ ITERATION_BATCH_SIZE = 10
 EVENTS_LIMIT_PER_STATION = 20
 LIMIT_KEY = KEY_PREFIX + "stations:fetch:limit"
 LIMIT_PER_SECOND = 2
+CLAIM_FOR_SECONDS = 60 * 5  # 5 minutes
 
 logger = get_logger().getChild(__name__)
 
@@ -72,17 +75,22 @@ class RunIngestionIterationUC:
             obs = station_obs_dict.get(station.id, [])
             station.update_fetch_info(now=now_utc(), observations_fetched=len(obs))
 
-    async def run(self):
+    async def run(self, cmd: RunIngestionIterationCmd) -> bool:
         async with self._uow.begin(write=True) as ctx:
-            stations = await ctx.stations.get_stations_for_fetch_for_update(
+            stations = await ctx.stations.claim_stations(
                 now=now_utc(),
                 limit=ITERATION_BATCH_SIZE,
+                owner=cmd.owner,
+                claim_for=timedelta(seconds=CLAIM_FOR_SECONDS),
             )
-            if not stations:
-                return False
 
-            obs = await self._fetch_observations(stations)
-            await self._insert_observations(stations, obs)
+        if not stations:
+            return False
 
-            await ctx.stations.update_stations(stations)
-            return True
+        obs = await self._fetch_observations(stations)
+        await self._insert_observations(stations, obs)
+
+        async with self._uow.begin(write=True) as ctx:
+            await ctx.stations.update_claimed_stations(stations, owner=cmd.owner)
+
+        return True

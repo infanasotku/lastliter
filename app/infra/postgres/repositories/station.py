@@ -1,7 +1,7 @@
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import literal, select, update
+from sqlalchemy import literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.domains.station import Station
@@ -46,6 +46,8 @@ class PgStationWriteRepository(PgStationRepository):
                 "next_fetch_at": station.next_fetch_at,
                 "fetch_interval_sec": station.fetch_interval_sec,
                 "priority": station.priority,
+                "lease_until": None,
+                "claimed_by": None,
             }
             for station in stations
         ]
@@ -54,38 +56,73 @@ class PgStationWriteRepository(PgStationRepository):
         inserted = await self._session.scalars(stmt)
         return len(list(inserted))
 
-    async def get_stations_for_fetch_for_update(
+    async def claim_stations(
         self,
         *,
         now: datetime,
         limit: int,
+        owner: str,
+        claim_for: timedelta,
     ) -> list[Station]:
-        stmt = (
-            select(StationModel)
-            .where(StationModel.next_fetch_at <= now)
+        picked = (
+            select(StationModel.id)
+            .where(
+                StationModel.next_fetch_at <= now,
+                or_(
+                    StationModel.lease_until.is_(None),
+                    StationModel.lease_until <= now,
+                ),
+            )
             .order_by(
                 StationModel.priority.desc(),
                 StationModel.last_fetched_at.asc(),
             )
             .limit(limit)
             .with_for_update(skip_locked=True)
+            .cte("picked")
         )
+
+        stmt = (
+            update(StationModel)
+            .where(StationModel.id == picked.c.id)
+            .values(
+                lease_until=now + claim_for,
+                claimed_by=owner,
+            )
+            .returning(StationModel)
+        )
+
         stations = await self._session.scalars(stmt)
         return [_to_domain(station) for station in stations]
 
-    async def update_stations(self, stations: Sequence[Station]) -> None:
+    async def update_claimed_stations(
+        self,
+        stations: Sequence[Station],
+        *,
+        owner: str,
+    ) -> int:
         if not stations:
-            return
+            return 0
 
-        vals = [
-            {
-                "id": station.id,
-                "last_fetched_at": station.last_fetched_at,
-                "next_fetch_at": station.next_fetch_at,
-                "fetch_interval_sec": station.fetch_interval_sec,
-            }
-            for station in stations
-        ]
+        updated = 0
 
-        stmt = update(StationModel)
-        await self._session.execute(stmt, params=vals)
+        for station in stations:
+            stmt = (
+                update(StationModel)
+                .where(
+                    StationModel.id == station.id,
+                    StationModel.claimed_by == owner,
+                )
+                .values(
+                    last_fetched_at=station.last_fetched_at,
+                    next_fetch_at=station.next_fetch_at,
+                    fetch_interval_sec=station.fetch_interval_sec,
+                    lease_until=None,
+                    claimed_by=None,
+                )
+                .returning(literal(1))
+            )
+            result = await self._session.scalar(stmt)
+            updated += 1 if result is not None else 0
+
+        return updated

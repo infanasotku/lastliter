@@ -21,3 +21,6 @@ class Station(Base):
     next_fetch_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fetch_interval_sec: Mapped[int] = mapped_column(nullable=False)
     priority: Mapped[int] = mapped_column(nullable=False)
+
+    claimed_by: Mapped[str | None] = mapped_column(nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
