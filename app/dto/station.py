@@ -35,3 +35,9 @@ class InsertObservation(RawStationObservation):
 
 class RunIngestionIterationCmd(BaseModel):
     owner: str
+
+
+class FetchRawStationObservations(BaseModel):
+    station_id: str
+    observations: list[RawStationObservation]
+    error: str | None = None

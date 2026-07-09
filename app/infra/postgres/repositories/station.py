@@ -23,6 +23,7 @@ def _to_domain(model: StationModel) -> Station:
         next_fetch_at=model.next_fetch_at,
         fetch_interval_sec=model.fetch_interval_sec,
         priority=model.priority,
+        fetch_error=model.fetch_error,
     )
 
 
@@ -117,6 +118,7 @@ class PgStationWriteRepository(PgStationRepository):
                     last_fetched_at=station.last_fetched_at,
                     next_fetch_at=station.next_fetch_at,
                     fetch_interval_sec=station.fetch_interval_sec,
+                    fetch_error=station.fetch_error,
                     lease_until=None,
                     claimed_by=None,
                 )

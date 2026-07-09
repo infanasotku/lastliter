@@ -5,6 +5,7 @@ from itertools import chain
 from app.contracts.uow import UnitOfWork
 from app.domains.station import Station
 from app.dto.station import (
+    FetchRawStationObservations,
     InsertObservation,
     RawStationObservation,
     RunIngestionIterationCmd,
@@ -40,14 +41,57 @@ class RunIngestionIterationUC:
         self._limiter = limiter
         self._click_ctx = click_ctx
 
-    async def _fetch_observations(self, stations: list[Station]) -> dict[str, list[RawStationObservation]]:
-        station_obs_dict: dict[str, list[RawStationObservation]] = {}
+    async def _claim_stations(self, owner: str) -> list[Station]:
+        async with self._uow.begin(write=True) as ctx:
+            stations = await ctx.stations.claim_stations(
+                now=now_utc(),
+                limit=ITERATION_BATCH_SIZE,
+                owner=owner,
+                claim_for=timedelta(seconds=CLAIM_FOR_SECONDS),
+            )
 
-        for station in stations:
-            await self._limiter.wait(key=LIMIT_KEY, limit_per_second=LIMIT_PER_SECOND)
-            station_obs_dict[station.id] = await self._gdebenz.get_obs_by_id(station.id, limit=EVENTS_LIMIT_PER_STATION)
+        return stations
+
+    async def _fetch_observations(self, stations: list[str]) -> dict[str, FetchRawStationObservations]:
+        station_obs_dict: dict[str, FetchRawStationObservations] = {}
+
+        for station_id in stations:
+            try:
+                await self._limiter.wait(key=LIMIT_KEY, limit_per_second=LIMIT_PER_SECOND)
+                observations = await self._gdebenz.get_obs_by_id(station_id, limit=EVENTS_LIMIT_PER_STATION)
+
+                station_obs_dict[station_id] = FetchRawStationObservations(
+                    station_id=station_id, observations=observations
+                )
+            except Exception as e:
+                logger.error(f"Failed to fetch observations for station {station_id}: {e}")
+
+                station_obs_dict[station_id] = FetchRawStationObservations(
+                    station_id=station_id, observations=[], error=str(e)
+                )
 
         return station_obs_dict
+
+    async def _process_failed_stations(
+        self, stations: list[Station], obs: dict[str, FetchRawStationObservations], *, owner: str
+    ) -> tuple[list[Station], dict[str, list[RawStationObservation]]]:
+        failed_stations: list[Station] = []
+        for station in stations:
+            station_obs = obs[station.id]
+            if station_obs.error:
+                station.mark_fetch_error(now=now_utc(), error=station_obs.error)
+                failed_stations.append(station)
+
+        if not failed_stations:
+            return stations, {k: v.observations for k, v in obs.items()}
+
+        async with self._uow.begin(write=True) as ctx:
+            await ctx.stations.update_claimed_stations(failed_stations, owner=owner)
+
+        failed_ids = set(station.id for station in failed_stations)
+        return [station for station in stations if station.id not in failed_ids], {
+            k: v.observations for k, v in obs.items() if k not in failed_ids
+        }
 
     async def _insert_observations(
         self, stations: list[Station], station_obs_dict: dict[str, list[RawStationObservation]]
@@ -67,27 +111,30 @@ class RunIngestionIterationUC:
             )
 
         # Just unwraps the list of lists into a single chain of observations
-        obs_c = chain(*([_to_obs(o, station) for o in station_obs_dict.get(station.id, [])] for station in stations))
+        obs_c = chain(*([_to_obs(o, station) for o in station_obs_dict[station.id]] for station in stations))
         obs = list(obs_c)
-        await self._click_ctx.stations.insert_raw_observations(obs)
+
+        error = None
+        try:
+            await self._click_ctx.stations.insert_raw_observations(obs)
+        except Exception as e:
+            logger.error(f"Failed to insert observations: {e}")
+            error = str(e)
 
         for station in stations:
-            obs = station_obs_dict.get(station.id, [])
-            station.update_fetch_info(now=now_utc(), observations_fetched=len(obs))
+            if error:
+                station.mark_fetch_error(now=now_utc(), error=error)
+            else:
+                station.update_fetch_info(now=now_utc(), observations_fetched=len(station_obs_dict[station.id]))
 
     async def run(self, cmd: RunIngestionIterationCmd) -> bool:
-        async with self._uow.begin(write=True) as ctx:
-            stations = await ctx.stations.claim_stations(
-                now=now_utc(),
-                limit=ITERATION_BATCH_SIZE,
-                owner=cmd.owner,
-                claim_for=timedelta(seconds=CLAIM_FOR_SECONDS),
-            )
-
+        stations = await self._claim_stations(owner=cmd.owner)
         if not stations:
             return False
 
-        obs = await self._fetch_observations(stations)
+        obs = await self._fetch_observations([station.id for station in stations])
+        stations, obs = await self._process_failed_stations(stations, obs, owner=cmd.owner)
+
         await self._insert_observations(stations, obs)
 
         async with self._uow.begin(write=True) as ctx:

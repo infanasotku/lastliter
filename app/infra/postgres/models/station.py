@@ -20,6 +20,7 @@ class Station(Base):
     last_fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     next_fetch_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fetch_interval_sec: Mapped[int] = mapped_column(nullable=False)
+    fetch_error: Mapped[str | None] = mapped_column(nullable=True)
     priority: Mapped[int] = mapped_column(nullable=False)
 
     claimed_by: Mapped[str | None] = mapped_column(nullable=True)

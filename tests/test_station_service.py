@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from mock import ANY, AsyncMock, MagicMock
+from mock import ANY, AsyncMock, MagicMock, call
 from pytest import fixture
 
 from app.domains.station import Station
@@ -231,3 +231,60 @@ class TestStationServiceRunIngestionIteration:
         )
         click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
         station_ctx.stations.update_claimed_stations.assert_awaited_once_with([station], owner="worker-1")
+
+    @pytest.mark.asyncio
+    async def test_marks_failed_fetch_and_continues_with_other_stations(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        failed_station = make_station("station-1")
+        successful_station = make_station("station-2", name="Other")
+        station_ctx.stations.claim_stations = AsyncMock(return_value=[failed_station, successful_station])
+        station_ctx.stations.update_claimed_stations = AsyncMock(return_value=1)
+
+        async def get_obs_by_id(station_id: str, *, limit: int):
+            if station_id == failed_station.id:
+                raise RuntimeError("upstream unavailable")
+            return []
+
+        gdebenz.get_obs_by_id = AsyncMock(side_effect=get_obs_by_id)
+
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+
+        assert has_work is True
+        assert failed_station.fetch_error == "upstream unavailable"
+        assert successful_station.fetch_error is None
+        click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
+        station_ctx.stations.update_claimed_stations.assert_has_awaits(
+            [
+                call([failed_station], owner="worker-1"),
+                call([successful_station], owner="worker-1"),
+            ]
+        )
+
+    @pytest.mark.asyncio
+    async def test_marks_remaining_stations_failed_when_clickhouse_insert_fails(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        first_station = make_station("station-1")
+        second_station = make_station("station-2", name="Other")
+        station_ctx.stations.claim_stations = AsyncMock(return_value=[first_station, second_station])
+        station_ctx.stations.update_claimed_stations = AsyncMock(return_value=2)
+        gdebenz.get_obs_by_id = AsyncMock(return_value=[])
+        click_ctx.stations.insert_raw_observations = AsyncMock(side_effect=RuntimeError("clickhouse unavailable"))
+
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+
+        assert has_work is True
+        assert first_station.fetch_error == "clickhouse unavailable"
+        assert second_station.fetch_error == "clickhouse unavailable"
+        station_ctx.stations.update_claimed_stations.assert_awaited_once_with(
+            [first_station, second_station], owner="worker-1"
+        )
