@@ -99,7 +99,7 @@ class StationService:
             new=inserted_stations,
         )
 
-    async def run_ingestion_iteration(self) -> None:
+    async def run_ingestion_iteration(self) -> bool:
         ITERATION_BATCH_SIZE = 10
         EVENTS_LIMIT_PER_STATION = 20
         LIMIT_KEY = KEY_PREFIX + "stations:fetch:limit"
@@ -149,7 +149,11 @@ class StationService:
                 now=now_utc(),
                 limit=ITERATION_BATCH_SIZE,
             )
+            if not stations:
+                return False
+
             obs = await _fetch_observations(stations)
             await _insert_observations(stations, obs)
 
             await ctx.stations.update_stations(stations)
+            return True
