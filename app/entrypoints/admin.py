@@ -53,6 +53,11 @@ def create_app() -> FastAPI:
     app.add_middleware(middlewares.CorrelationIdASGIMiddleware)
     logger.info("Middleware configured")
 
+    @app.get("/healthz", include_in_schema=False)
+    async def _():
+        logger.info("Healthcheck requested")
+        return {"status": "ok"}
+
     logger.info("Creating admin panel")
     admin = Admin(
         app,
@@ -68,11 +73,6 @@ def create_app() -> FastAPI:
     )
     admin.add_view(station.StationView)
     logger.info("Admin panel registered")
-
-    @app.get("/healthz", include_in_schema=False)
-    async def _():
-        logger.info("Healthcheck requested")
-        return {"status": "ok"}
 
     logger.info("Admin application created")
     return app
