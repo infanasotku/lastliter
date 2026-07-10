@@ -114,16 +114,21 @@ class RunIngestionIterationUC:
         obs_c = chain(*([_to_obs(o, station) for o in station_obs_dict[station.id]] for station in stations))
         obs = list(obs_c)
 
-        error = None
+        stations_error_dict: dict[str, str] = {}
         try:
             await self._click_ctx.stations.insert_raw_observations(obs)
         except Exception as e:
-            logger.error(f"Failed to insert observations: {e}")
-            error = str(e)
+            logger.error(f"Failed to bulk insert observations: {e}, trying to insert one by one")
+            for ob in obs:
+                try:
+                    await self._click_ctx.stations.insert_raw_observations([ob])
+                except Exception as e:
+                    logger.error(f"Failed to insert observation {ob.id}: {e}")
+                    stations_error_dict[ob.station_id] = str(e)
 
         for station in stations:
-            if error:
-                station.mark_fetch_error(now=now_utc(), error=error)
+            if station.id in stations_error_dict:
+                station.mark_fetch_error(now=now_utc(), error=stations_error_dict[station.id])
             else:
                 station.update_fetch_info(now=now_utc(), observations_fetched=len(station_obs_dict[station.id]))
 

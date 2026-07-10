@@ -96,6 +96,14 @@ Adjustment rules:
 - adaptive scheduling
 - continuous ingestion loop
 
+## Deferred operational work
+
+- Configure explicit HTTP connect/read timeouts and a bounded retry policy for
+  GdeBenz requests. Retries must fit within the station lease or renew it.
+- Add and validate a Postgres index for due-station claiming. The index should
+  support `next_fetch_at`, lease expiration, priority, and `last_fetched_at`
+  used by the scheduler query.
+
 ## Mental model
 
 Postgres → scheduler brain (WHAT + WHEN)

@@ -5,7 +5,13 @@ from mock import ANY, AsyncMock, MagicMock, call
 from pytest import fixture
 
 from app.domains.station import Station
-from app.dto.station import RunIngestionIterationCmd, StartSyncStationCmd, SyncStationCmd, SyncStationResult
+from app.dto.station import (
+    RawStationObservation,
+    RunIngestionIterationCmd,
+    StartSyncStationCmd,
+    SyncStationCmd,
+    SyncStationResult,
+)
 from app.services.station import StationService
 
 
@@ -266,7 +272,7 @@ class TestStationServiceRunIngestionIteration:
         )
 
     @pytest.mark.asyncio
-    async def test_marks_remaining_stations_failed_when_clickhouse_insert_fails(
+    async def test_retries_individual_observations_when_bulk_clickhouse_insert_fails(
         self,
         svc: StationService,
         station_ctx: MagicMock,
@@ -277,14 +283,27 @@ class TestStationServiceRunIngestionIteration:
         second_station = make_station("station-2", name="Other")
         station_ctx.stations.claim_stations = AsyncMock(return_value=[first_station, second_station])
         station_ctx.stations.update_claimed_stations = AsyncMock(return_value=2)
-        gdebenz.get_obs_by_id = AsyncMock(return_value=[])
-        click_ctx.stations.insert_raw_observations = AsyncMock(side_effect=RuntimeError("clickhouse unavailable"))
+        observation = RawStationObservation(
+            status="yes",
+            detail="available",
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            author_reliable=True,
+            on_site=True,
+        )
+        gdebenz.get_obs_by_id = AsyncMock(return_value=[observation])
+
+        async def insert_raw_observations(observations):
+            if len(observations) > 1 or observations[0].station_id == second_station.id:
+                raise RuntimeError("clickhouse unavailable")
+
+        click_ctx.stations.insert_raw_observations = AsyncMock(side_effect=insert_raw_observations)
 
         has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
 
         assert has_work is True
-        assert first_station.fetch_error == "clickhouse unavailable"
+        assert first_station.fetch_error is None
         assert second_station.fetch_error == "clickhouse unavailable"
+        assert click_ctx.stations.insert_raw_observations.await_count == 3
         station_ctx.stations.update_claimed_stations.assert_awaited_once_with(
             [first_station, second_station], owner="worker-1"
         )
