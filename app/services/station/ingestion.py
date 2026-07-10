@@ -46,8 +46,8 @@ class _HeartbeatContext:
     status: _HeartbeatStatus
     error: str | None = None
 
-    def retain_failed(self, successed_stations: list[Station]) -> None:
-        ids = {station.id for station in successed_stations}
+    def retain_active(self, active_stations: list[Station]) -> None:
+        ids = {station.id for station in active_stations}
         self.leased_stations = [station for station in self.leased_stations if station.id in ids]
 
 
@@ -221,7 +221,7 @@ class RunIngestionIterationUC:
         async with self._run_heartbeat_loop(stations, owner=cmd.owner) as hb_ctx:
             obs = await self._fetch_observations([station.id for station in stations])
             stations, obs = await self._process_failed_stations(stations, obs, owner=cmd.owner)
-            hb_ctx.retain_failed(stations)
+            hb_ctx.retain_active(stations)
 
             if hb_ctx.status == _HeartbeatStatus.ERROR:
                 logger.error(f"Heartbeat loop encountered an error: {hb_ctx.error}")

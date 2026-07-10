@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -236,7 +237,7 @@ class TestStationServiceRunIngestionIteration:
             claim_for=timedelta(minutes=5),
         )
         click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
-        station_ctx.stations.update_claimed_stations.assert_awaited_once_with([station], owner="worker-1")
+        station_ctx.stations.update_claimed_stations.assert_awaited_once_with([station], owner="worker-1", now=ANY)
 
     @pytest.mark.asyncio
     async def test_marks_failed_fetch_and_continues_with_other_stations(
@@ -266,8 +267,8 @@ class TestStationServiceRunIngestionIteration:
         click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
         station_ctx.stations.update_claimed_stations.assert_has_awaits(
             [
-                call([failed_station], owner="worker-1"),
-                call([successful_station], owner="worker-1"),
+                call([failed_station], owner="worker-1", now=ANY),
+                call([successful_station], owner="worker-1", now=ANY),
             ]
         )
 
@@ -305,5 +306,150 @@ class TestStationServiceRunIngestionIteration:
         assert second_station.fetch_error == "clickhouse unavailable"
         assert click_ctx.stations.insert_raw_observations.await_count == 3
         station_ctx.stations.update_claimed_stations.assert_awaited_once_with(
-            [first_station, second_station], owner="worker-1"
+            [first_station, second_station], owner="worker-1", now=ANY
         )
+
+    @pytest.mark.asyncio
+    async def test_marks_all_stations_failed_and_skips_clickhouse_when_every_fetch_fails(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        stations = [make_station("station-1"), make_station("station-2", name="Other")]
+        station_ctx.stations.claim_stations = AsyncMock(return_value=stations)
+        station_ctx.stations.update_claimed_stations = AsyncMock(return_value=2)
+        gdebenz.get_obs_by_id = AsyncMock(side_effect=RuntimeError("upstream unavailable"))
+
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+
+        assert has_work is False
+        assert [station.fetch_error for station in stations] == ["upstream unavailable", "upstream unavailable"]
+        click_ctx.stations.insert_raw_observations.assert_not_awaited()
+        station_ctx.stations.update_claimed_stations.assert_awaited_once_with(stations, owner="worker-1", now=ANY)
+
+    @pytest.mark.asyncio
+    async def test_inserts_normalized_observation_and_rate_limits_each_station(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+        limiter: MagicMock,
+    ):
+        station = make_station("station-1")
+        raw = RawStationObservation(
+            status="queue",
+            detail="long queue",
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            author_reliable=True,
+            on_site=False,
+        )
+        station_ctx.stations.claim_stations = AsyncMock(return_value=[station])
+        station_ctx.stations.update_claimed_stations = AsyncMock(return_value=1)
+        gdebenz.get_obs_by_id = AsyncMock(return_value=[raw])
+
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+
+        assert has_work is True
+        limiter.wait.assert_awaited_once_with(key="lastliter:stations:fetch:limit", limit_per_second=2)
+        gdebenz.get_obs_by_id.assert_awaited_once_with("station-1", limit=20)
+        inserted = click_ctx.stations.insert_raw_observations.await_args.args[0]
+        assert len(inserted) == 1
+        assert inserted[0].station_id == station.id
+        assert inserted[0].status == raw.status
+        assert inserted[0].detail == raw.detail
+        assert inserted[0].created_at == raw.created_at
+        assert inserted[0].author_reliable is True
+        assert inserted[0].on_site is False
+
+    @pytest.mark.asyncio
+    async def test_skips_clickhouse_when_heartbeat_loses_all_leases(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+        limiter: MagicMock,
+    ):
+        station = make_station("station-1")
+        station_ctx.stations.claim_stations = AsyncMock(return_value=[station])
+        station_ctx.stations.refresh_lease = AsyncMock(return_value=0)
+        station_ctx.stations.update_claimed_stations = AsyncMock()
+        gdebenz.get_obs_by_id = AsyncMock(return_value=[])
+
+        async def yield_to_heartbeat(**_kwargs):
+            await asyncio.sleep(0)
+
+        limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
+
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+
+        assert has_work is False
+        click_ctx.stations.insert_raw_observations.assert_not_awaited()
+        station_ctx.stations.update_claimed_stations.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_inserts_only_stations_with_refreshed_lease_after_partial_lease_loss(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+        limiter: MagicMock,
+    ):
+        retained_station = make_station("station-1")
+        lost_station = make_station("station-2", name="Other")
+        raw = RawStationObservation(
+            status="yes",
+            detail="available",
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            author_reliable=True,
+            on_site=True,
+        )
+        station_ctx.stations.claim_stations = AsyncMock(return_value=[retained_station, lost_station])
+        station_ctx.stations.refresh_lease = AsyncMock(return_value=1)
+        station_ctx.stations.get_claimed = AsyncMock(return_value=[retained_station])
+        station_ctx.stations.update_claimed_stations = AsyncMock(return_value=1)
+        gdebenz.get_obs_by_id = AsyncMock(return_value=[raw])
+
+        async def yield_to_heartbeat(**_kwargs):
+            await asyncio.sleep(0)
+
+        limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
+
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+
+        assert has_work is True
+        inserted = click_ctx.stations.insert_raw_observations.await_args.args[0]
+        assert [observation.station_id for observation in inserted] == [retained_station.id]
+        station_ctx.stations.update_claimed_stations.assert_awaited_once_with(
+            [retained_station, lost_station], owner="worker-1", now=ANY
+        )
+
+    @pytest.mark.asyncio
+    async def test_skips_clickhouse_when_heartbeat_raises(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+        limiter: MagicMock,
+    ):
+        station = make_station("station-1")
+        station_ctx.stations.claim_stations = AsyncMock(return_value=[station])
+        station_ctx.stations.refresh_lease = AsyncMock(side_effect=RuntimeError("postgres unavailable"))
+        station_ctx.stations.update_claimed_stations = AsyncMock()
+        gdebenz.get_obs_by_id = AsyncMock(return_value=[])
+
+        async def yield_to_heartbeat(**_kwargs):
+            await asyncio.sleep(0)
+
+        limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
+
+        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+
+        assert has_work is False
+        click_ctx.stations.insert_raw_observations.assert_not_awaited()
+        station_ctx.stations.update_claimed_stations.assert_not_awaited()
