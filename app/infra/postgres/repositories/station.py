@@ -31,32 +31,7 @@ class PgStationRepository(PostgresRepository):
     pass
 
 
-class PgStationWriteRepository(PgStationRepository):
-    async def insert_many_safe(self, stations: Sequence[Station]) -> int:
-        if not stations:
-            return 0
-
-        vals = [
-            {
-                "id": station.id,
-                "name": station.name,
-                "address": station.address,
-                "lat": station.lat,
-                "lon": station.lon,
-                "last_fetched_at": station.last_fetched_at,
-                "next_fetch_at": station.next_fetch_at,
-                "fetch_interval_sec": station.fetch_interval_sec,
-                "priority": station.priority,
-                "lease_until": None,
-                "claimed_by": None,
-            }
-            for station in stations
-        ]
-
-        stmt = pg_insert(StationModel).values(vals).on_conflict_do_nothing(index_elements=["id"]).returning(literal(1))
-        inserted = await self._session.scalars(stmt)
-        return len(list(inserted))
-
+class GuardedMixin(PostgresRepository):
     async def claim_stations(
         self,
         *,
@@ -96,11 +71,36 @@ class PgStationWriteRepository(PgStationRepository):
         stations = await self._session.scalars(stmt)
         return [_to_domain(station) for station in stations]
 
+    async def refresh_lease(
+        self,
+        stations: list[Station],
+        *,
+        owner: str,
+        claim_for: timedelta,
+        now: datetime,
+    ) -> int:
+        ids = {station.id for station in stations}
+
+        stmt = (
+            update(StationModel)
+            .where(
+                StationModel.claimed_by == owner,
+                StationModel.id.in_(ids),
+                StationModel.lease_until > now,
+            )
+            .values(lease_until=now + claim_for)
+            .returning(literal(1))
+        )
+        updated = await self._session.scalars(stmt)
+
+        return len(list(updated))
+
     async def update_claimed_stations(
         self,
         stations: Sequence[Station],
         *,
         owner: str,
+        now: datetime,
     ) -> int:
         if not stations:
             return 0
@@ -113,6 +113,7 @@ class PgStationWriteRepository(PgStationRepository):
                 .where(
                     StationModel.id == station.id,
                     StationModel.claimed_by == owner,
+                    StationModel.lease_until > now,
                 )
                 .values(
                     last_fetched_at=station.last_fetched_at,
@@ -128,3 +129,38 @@ class PgStationWriteRepository(PgStationRepository):
             updated += 1 if result is not None else 0
 
         return updated
+
+    async def get_claimed(self, owner: str, now: datetime) -> list[Station]:
+        stmt = select(StationModel).where(
+            StationModel.claimed_by == owner,
+            StationModel.lease_until > now,
+        )
+        stations = await self._session.scalars(stmt)
+        return [_to_domain(station) for station in stations]
+
+
+class PgStationWriteRepository(GuardedMixin, PgStationRepository):
+    async def insert_many_safe(self, stations: Sequence[Station]) -> int:
+        if not stations:
+            return 0
+
+        vals = [
+            {
+                "id": station.id,
+                "name": station.name,
+                "address": station.address,
+                "lat": station.lat,
+                "lon": station.lon,
+                "last_fetched_at": station.last_fetched_at,
+                "next_fetch_at": station.next_fetch_at,
+                "fetch_interval_sec": station.fetch_interval_sec,
+                "priority": station.priority,
+                "lease_until": None,
+                "claimed_by": None,
+            }
+            for station in stations
+        ]
+
+        stmt = pg_insert(StationModel).values(vals).on_conflict_do_nothing(index_elements=["id"]).returning(literal(1))
+        inserted = await self._session.scalars(stmt)
+        return len(list(inserted))

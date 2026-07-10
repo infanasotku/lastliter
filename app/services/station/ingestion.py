@@ -1,6 +1,11 @@
+import asyncio
+import contextlib
 import hashlib
+from dataclasses import dataclass
 from datetime import timedelta
+from enum import StrEnum
 from itertools import chain
+from typing import AsyncGenerator
 
 from app.contracts.uow import UnitOfWork
 from app.domains.station import Station
@@ -23,8 +28,23 @@ EVENTS_LIMIT_PER_STATION = 20
 LIMIT_KEY = KEY_PREFIX + "stations:fetch:limit"
 LIMIT_PER_SECOND = 2
 CLAIM_FOR_SECONDS = 60 * 5  # 5 minutes
+CLAIM_INTERVAL_SECONDS = 60  # 1 minute
 
 logger = get_logger().getChild(__name__)
+
+
+class _HeartbeatStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
+@dataclass
+class _HeartbeatContext:
+    leased_stations: list[Station]
+
+    status: _HeartbeatStatus
+    error: str | None = None
 
 
 class RunIngestionIterationUC:
@@ -51,6 +71,57 @@ class RunIngestionIterationUC:
             )
 
         return stations
+
+    @contextlib.asynccontextmanager
+    async def _run_heartbeat_loop(
+        self,
+        stations: list[Station],
+        *,
+        owner: str,
+    ) -> AsyncGenerator[_HeartbeatContext, None]:
+        hb_ctx = _HeartbeatContext(
+            leased_stations=stations,
+            status=_HeartbeatStatus.RUNNING,
+        )
+
+        async def _wrap():
+            try:
+                await _loop()
+            except Exception as e:
+                logger.error(f"Heartbeat loop: error occurred for owner {owner}: {e}")
+                hb_ctx.status = _HeartbeatStatus.ERROR
+                hb_ctx.error = str(e)
+
+        async def _loop():
+            while True:
+                async with self._uow.begin(write=True) as ctx:
+                    refreshed = await ctx.stations.refresh_lease(
+                        hb_ctx.leased_stations,
+                        owner=owner,
+                        claim_for=timedelta(seconds=CLAIM_FOR_SECONDS),
+                        now=now_utc(),
+                    )
+
+                if not refreshed:
+                    logger.warning(f"Heartbeat loop: no stations refreshed for owner {owner}, stopping loop")
+                    break
+                if refreshed != len(hb_ctx.leased_stations):
+                    logger.warning(
+                        f"Heartbeat loop: refreshed {refreshed} out of {len(hb_ctx.leased_stations)} stations for owner {owner}"
+                    )
+                    hb_ctx.leased_stations = await ctx.stations.get_claimed(owner=owner, now=now_utc())
+                await asyncio.sleep(CLAIM_INTERVAL_SECONDS)
+
+        task = asyncio.create_task(_wrap())
+
+        try:
+            yield hb_ctx
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+            hb_ctx.status = _HeartbeatStatus.COMPLETED
 
     async def _fetch_observations(self, stations: list[str]) -> dict[str, FetchRawStationObservations]:
         station_obs_dict: dict[str, FetchRawStationObservations] = {}
@@ -86,7 +157,11 @@ class RunIngestionIterationUC:
             return stations, {k: v.observations for k, v in obs.items()}
 
         async with self._uow.begin(write=True) as ctx:
-            await ctx.stations.update_claimed_stations(failed_stations, owner=owner)
+            await ctx.stations.update_claimed_stations(
+                failed_stations,  # update filters not claimed stations by it's own
+                owner=owner,
+                now=now_utc(),
+            )
 
         failed_ids = set(station.id for station in failed_stations)
         return [station for station in stations if station.id not in failed_ids], {
@@ -137,12 +212,21 @@ class RunIngestionIterationUC:
         if not stations:
             return False
 
-        obs = await self._fetch_observations([station.id for station in stations])
-        stations, obs = await self._process_failed_stations(stations, obs, owner=cmd.owner)
+        async with self._run_heartbeat_loop(stations, owner=cmd.owner) as hb_ctx:
+            obs = await self._fetch_observations([station.id for station in stations])
+            stations, obs = await self._process_failed_stations(stations, obs, owner=cmd.owner)
 
-        await self._insert_observations(stations, obs)
+            if hb_ctx.status == _HeartbeatStatus.ERROR:
+                logger.error(f"Heartbeat loop encountered an error: {hb_ctx.error}")
+                return False
 
-        async with self._uow.begin(write=True) as ctx:
-            await ctx.stations.update_claimed_stations(stations, owner=cmd.owner)
+            await self._insert_observations(hb_ctx.leased_stations, obs)
+
+            async with self._uow.begin(write=True) as ctx:
+                await ctx.stations.update_claimed_stations(
+                    stations,  # update filters not claimed stations by it's own
+                    owner=cmd.owner,
+                    now=now_utc(),
+                )
 
         return True
