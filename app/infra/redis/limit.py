@@ -1,6 +1,5 @@
 import asyncio
-
-HARDCODED_SLEEP_SECONDS = 1
+import random
 
 
 class RateLimiter:
@@ -8,5 +7,5 @@ class RateLimiter:
         pass
 
     async def wait(self, *, key: str, limit_per_second: int) -> None:
-        await asyncio.sleep(HARDCODED_SLEEP_SECONDS)
+        await asyncio.sleep(random.uniform(1, 5))
         # TODO: Implement token bucket limiting
