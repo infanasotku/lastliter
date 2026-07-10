@@ -1,0 +1,47 @@
+name: test
+on:
+  push:
+    branches: [test]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build
+        with:
+          environment: test
+          registry_url: ${{ vars.REGISTRY_URL }}
+          registry_username: ${{ secrets.REGISTRY_USERNAME }}
+          registry_password: ${{ secrets.REGISTRY_PASSWORD }}
+  migrate-postgres:
+    needs: build
+    runs-on: [self-hosted, helmfile]
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deploy
+        with: {service: postgres-migration, environment: test}
+  migrate-clickhouse:
+    needs: migrate-postgres
+    runs-on: [self-hosted, helmfile]
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deploy
+        with: {service: clickhouse-migration, environment: test}
+  deploy:
+    needs: migrate-clickhouse
+    strategy:
+      matrix:
+        service: [admin, worker, loop]
+    runs-on: [self-hosted, helmfile]
+    environment: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deploy
+        with:
+          service: ${{ matrix.service }}
+          environment: test

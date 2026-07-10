@@ -1,0 +1,62 @@
+environments:
+  prod:
+    values:
+      - namespace: lastliter
+      - secretsFile: deploy/secrets/prod/common.secrets.yaml
+  test:
+    values:
+      - namespace: lastliter-test
+      - secretsFile: deploy/secrets/test/common.secrets.yaml
+---
+helmDefaults:
+  kubeContext: kubernetes-admin@kubernetes
+  wait: true
+  timeout: 300
+  atomic: true
+  createNamespace: true
+templates:
+  default:
+    namespace: {{ .Environment.Values.namespace }}
+    chart: ./charts/{{`{{ .Release.Name }}`}}
+    values:
+      - deploy/values/common/common.values.yaml
+      - deploy/values/common/{{`{{ .Release.Name }}`}}.values.yaml
+      - deploy/values/{{ .Environment.Name }}/common.values.yaml
+      - deploy/values/{{ .Environment.Name }}/{{`{{ .Release.Name }}`}}.values.yaml
+    set:
+      - name: environment
+        value: {{ .Environment.Name }}
+      - name: container.tag
+        value: {{ printf "%v" (required "tag is required; pass --state-values-set tag=<value>" (index .Environment.Values "tag")) }}
+    hooks:
+      - events: [prepare]
+        command: bash
+        args: [-c, "set -e; sops -d {{ .Environment.Values.secretsFile }} > charts/{{`{{ .Release.Name }}`}}/temp-secrets.yaml"]
+      - events: [cleanup]
+        command: bash
+        args: [-c, "rm -f charts/{{`{{ .Release.Name }}`}}/temp-secrets.yaml charts/{{`{{ .Release.Name }}`}}/Chart.lock; rm -rf charts/{{`{{ .Release.Name }}`}}/charts"]
+releases:
+  - name: postgres-migration
+    inherit:
+      - template: default
+    labels: {svc: postgres-migration}
+    waitForJobs: true
+    atomic: false
+  - name: clickhouse-migration
+    inherit:
+      - template: default
+    labels: {svc: clickhouse-migration}
+    waitForJobs: true
+    atomic: false
+  - name: admin
+    inherit:
+      - template: default
+    labels: {svc: admin}
+  - name: worker
+    inherit:
+      - template: default
+    labels: {svc: worker}
+  - name: loop
+    inherit:
+      - template: default
+    labels: {svc: loop}

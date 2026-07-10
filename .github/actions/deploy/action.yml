@@ -1,0 +1,23 @@
+name: Deploy
+description: Deploy one Helmfile release
+inputs:
+  service:
+    description: Helmfile service label
+    required: true
+  environment:
+    description: Deployment environment
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Deploy
+      shell: bash
+      env:
+        TAG: ${{ format('{0}-{1}', inputs.environment, github.run_number) }}
+      run: |
+        cd k8s
+        helmfile -f helmfile.yaml.gotmpl \
+          --state-values-set tag="$TAG" \
+          -e "${{ inputs.environment }}" \
+          -l "svc=${{ inputs.service }}" \
+          --skip-refresh apply

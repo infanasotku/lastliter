@@ -1,0 +1,4 @@
+config:
+  ENV: prod
+  ADMIN__USERNAME: admin
+  REDIS__CLIENT: lastliter-test

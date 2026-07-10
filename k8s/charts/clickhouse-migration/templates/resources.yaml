@@ -1,0 +1,5 @@
+{{ include "common.config" . }}
+---
+{{ include "common.secrets" . }}
+---
+{{ include "common.job" . }}

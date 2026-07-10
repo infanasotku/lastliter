@@ -1,0 +1,4 @@
+charts/*/temp-secrets.yaml
+charts/*/Chart.lock
+charts/*/charts/
+deploy/secrets/*/common.secrets.yaml

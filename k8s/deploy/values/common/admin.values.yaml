@@ -1,0 +1,11 @@
+container:
+  name: admin
+  port: 5100
+  command: [uvicorn]
+  args: [app.entrypoints.admin:create_app, --factory, --proxy-headers, "--forwarded-allow-ips=*", --workers, "1", --host, 0.0.0.0, --port, "5100"]
+livenessProbe: &probe
+  httpGet: {path: /healthz, port: http}
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+readinessProbe: *probe

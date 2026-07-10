@@ -1,0 +1,5 @@
+container:
+  image: registry.infanasotku.com:5501/lastliter/api
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {cpu: 500m, memory: 256Mi}

@@ -1,0 +1,4 @@
+container:
+  name: clickhouse-migration
+  command: [python]
+  args: [cli.py, click, upgrade, 001_add_stations_observations]

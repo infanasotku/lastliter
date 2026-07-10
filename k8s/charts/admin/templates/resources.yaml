@@ -1,0 +1,9 @@
+{{ include "common.config" . }}
+---
+{{ include "common.secrets" . }}
+---
+{{ include "common.deployment" . }}
+---
+{{ include "common.service" . }}
+---
+{{ include "common.ingress" . }}

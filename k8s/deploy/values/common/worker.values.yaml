@@ -1,0 +1,10 @@
+container:
+  name: worker
+  command: [celery]
+  args: [-A, app.entrypoints.worker:app, worker, --concurrency, "2", --loglevel=info]
+livenessProbe:
+  exec:
+    command: [sh, -c, "test -r /proc/1/cmdline && tr '\\0' ' ' < /proc/1/cmdline | grep -q 'celery.*worker'"]
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5

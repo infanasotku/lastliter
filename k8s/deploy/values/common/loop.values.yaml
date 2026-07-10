@@ -1,0 +1,11 @@
+container:
+  name: loop
+  port: 5101
+  command: [uvicorn]
+  args: [app.entrypoints.loop:create_app, --factory, --workers, "1", --host, 0.0.0.0, --port, "5101"]
+livenessProbe: &probe
+  httpGet: {path: /healthz, port: http}
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+readinessProbe: *probe
