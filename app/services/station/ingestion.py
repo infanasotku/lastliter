@@ -46,6 +46,10 @@ class _HeartbeatContext:
     status: _HeartbeatStatus
     error: str | None = None
 
+    def retain_failed(self, successed_stations: list[Station]) -> None:
+        ids = {station.id for station in successed_stations}
+        self.leased_stations = [station for station in self.leased_stations if station.id in ids]
+
 
 class RunIngestionIterationUC:
     def __init__(
@@ -102,14 +106,16 @@ class RunIngestionIterationUC:
                         now=now_utc(),
                     )
 
-                if not refreshed:
-                    logger.warning(f"Heartbeat loop: no stations refreshed for owner {owner}, stopping loop")
-                    break
-                if refreshed != len(hb_ctx.leased_stations):
-                    logger.warning(
-                        f"Heartbeat loop: refreshed {refreshed} out of {len(hb_ctx.leased_stations)} stations for owner {owner}"
-                    )
-                    hb_ctx.leased_stations = await ctx.stations.get_claimed(owner=owner, now=now_utc())
+                    if not refreshed:
+                        logger.warning(f"Heartbeat loop: no stations refreshed for owner {owner}, stopping loop")
+                        hb_ctx.leased_stations = []
+                        break
+                    if refreshed != len(hb_ctx.leased_stations):
+                        logger.warning(
+                            f"Heartbeat loop: refreshed {refreshed} out of {len(hb_ctx.leased_stations)} stations for owner {owner}"
+                        )
+                        hb_ctx.leased_stations = await ctx.stations.get_claimed(owner=owner, now=now_utc())
+
                 await asyncio.sleep(CLAIM_INTERVAL_SECONDS)
 
         task = asyncio.create_task(_wrap())
@@ -215,9 +221,13 @@ class RunIngestionIterationUC:
         async with self._run_heartbeat_loop(stations, owner=cmd.owner) as hb_ctx:
             obs = await self._fetch_observations([station.id for station in stations])
             stations, obs = await self._process_failed_stations(stations, obs, owner=cmd.owner)
+            hb_ctx.retain_failed(stations)
 
             if hb_ctx.status == _HeartbeatStatus.ERROR:
                 logger.error(f"Heartbeat loop encountered an error: {hb_ctx.error}")
+                return False
+            if not hb_ctx.leased_stations:
+                logger.warning("No leased stations left after processing failed stations, stopping ingestion iteration")
                 return False
 
             await self._insert_observations(hb_ctx.leased_stations, obs)
