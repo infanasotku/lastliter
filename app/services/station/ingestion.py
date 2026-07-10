@@ -33,6 +33,10 @@ CLAIM_INTERVAL_SECONDS = 60  # 1 minute
 logger = get_logger().getChild(__name__)
 
 
+def _station_ids(stations: list[Station]) -> list[str]:
+    return [station.id for station in stations]
+
+
 class _HeartbeatStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
@@ -66,6 +70,14 @@ class RunIngestionIterationUC:
         self._click_ctx = click_ctx
 
     async def _claim_stations(self, owner: str) -> list[Station]:
+        logger.info(
+            f"Claiming up to {ITERATION_BATCH_SIZE} stations for owner {owner}",
+            extra={
+                "owner": owner,
+                "limit": ITERATION_BATCH_SIZE,
+                "claim_for_seconds": CLAIM_FOR_SECONDS,
+            },
+        )
         async with self._uow.begin(write=True) as ctx:
             stations = await ctx.stations.claim_stations(
                 now=now_utc(),
@@ -74,6 +86,14 @@ class RunIngestionIterationUC:
                 claim_for=timedelta(seconds=CLAIM_FOR_SECONDS),
             )
 
+        logger.info(
+            f"Claimed {len(stations)} stations for owner {owner}",
+            extra={
+                "owner": owner,
+                "stations_count": len(stations),
+                "station_ids": _station_ids(stations),
+            },
+        )
         return stations
 
     @contextlib.asynccontextmanager
@@ -87,12 +107,25 @@ class RunIngestionIterationUC:
             leased_stations=stations,
             status=_HeartbeatStatus.RUNNING,
         )
+        logger.info(
+            f"Starting heartbeat loop for owner {owner} with {len(stations)} stations",
+            extra={
+                "owner": owner,
+                "stations_count": len(stations),
+                "station_ids": _station_ids(stations),
+                "claim_for_seconds": CLAIM_FOR_SECONDS,
+                "heartbeat_interval_seconds": CLAIM_INTERVAL_SECONDS,
+            },
+        )
 
         async def _wrap():
             try:
                 await _loop()
             except Exception as e:
-                logger.error(f"Heartbeat loop: error occurred for owner {owner}: {e}")
+                logger.error(
+                    f"Heartbeat loop: error occurred for owner {owner}: {e}",
+                    extra={"owner": owner, "error": str(e)},
+                )
                 hb_ctx.status = _HeartbeatStatus.ERROR
                 hb_ctx.error = str(e)
 
@@ -107,14 +140,35 @@ class RunIngestionIterationUC:
                     )
 
                     if not refreshed:
-                        logger.warning(f"Heartbeat loop: no stations refreshed for owner {owner}, stopping loop")
+                        logger.warning(
+                            f"Heartbeat loop: no stations refreshed for owner {owner}, stopping loop",
+                            extra={
+                                "owner": owner,
+                                "stations_count": len(hb_ctx.leased_stations),
+                                "station_ids": _station_ids(hb_ctx.leased_stations),
+                            },
+                        )
                         hb_ctx.leased_stations = []
                         break
                     if refreshed != len(hb_ctx.leased_stations):
                         logger.warning(
-                            f"Heartbeat loop: refreshed {refreshed} out of {len(hb_ctx.leased_stations)} stations for owner {owner}"
+                            f"Heartbeat loop: refreshed {refreshed} out of {len(hb_ctx.leased_stations)} stations for owner {owner}",
+                            extra={
+                                "owner": owner,
+                                "refreshed_count": refreshed,
+                                "stations_count": len(hb_ctx.leased_stations),
+                                "station_ids": _station_ids(hb_ctx.leased_stations),
+                            },
                         )
                         hb_ctx.leased_stations = await ctx.stations.get_claimed(owner=owner, now=now_utc())
+                        logger.info(
+                            f"Heartbeat loop: retained {len(hb_ctx.leased_stations)} claimed stations for owner {owner}",
+                            extra={
+                                "owner": owner,
+                                "stations_count": len(hb_ctx.leased_stations),
+                                "station_ids": _station_ids(hb_ctx.leased_stations),
+                            },
+                        )
 
                 await asyncio.sleep(CLAIM_INTERVAL_SECONDS)
 
@@ -128,9 +182,21 @@ class RunIngestionIterationUC:
                 await task
 
             hb_ctx.status = _HeartbeatStatus.COMPLETED
+            logger.info(
+                f"Heartbeat loop stopped for owner {owner}",
+                extra={
+                    "owner": owner,
+                    "stations_count": len(hb_ctx.leased_stations),
+                    "station_ids": _station_ids(hb_ctx.leased_stations),
+                },
+            )
 
     async def _fetch_observations(self, stations: list[str]) -> dict[str, FetchRawStationObservations]:
         station_obs_dict: dict[str, FetchRawStationObservations] = {}
+        logger.info(
+            f"Fetching observations for {len(stations)} stations",
+            extra={"stations_count": len(stations), "station_ids": stations},
+        )
 
         for station_id in stations:
             try:
@@ -140,13 +206,34 @@ class RunIngestionIterationUC:
                 station_obs_dict[station_id] = FetchRawStationObservations(
                     station_id=station_id, observations=observations
                 )
+                logger.info(
+                    f"Fetched {len(observations)} observations for station {station_id}",
+                    extra={
+                        "station_id": station_id,
+                        "observations_count": len(observations),
+                        "events_limit": EVENTS_LIMIT_PER_STATION,
+                    },
+                )
             except Exception as e:
-                logger.error(f"Failed to fetch observations for station {station_id}: {e}")
+                logger.error(
+                    f"Failed to fetch observations for station {station_id}: {e}",
+                    extra={"station_id": station_id, "error": str(e)},
+                )
 
                 station_obs_dict[station_id] = FetchRawStationObservations(
                     station_id=station_id, observations=[], error=str(e)
                 )
 
+        failed_count = sum(1 for station_obs in station_obs_dict.values() if station_obs.error)
+        observations_count = sum(len(station_obs.observations) for station_obs in station_obs_dict.values())
+        logger.info(
+            f"Finished fetching observations: {observations_count} observations, {failed_count} failed stations",
+            extra={
+                "stations_count": len(stations),
+                "observations_count": observations_count,
+                "failed_stations_count": failed_count,
+            },
+        )
         return station_obs_dict
 
     async def _process_failed_stations(
@@ -160,8 +247,20 @@ class RunIngestionIterationUC:
                 failed_stations.append(station)
 
         if not failed_stations:
+            logger.info(
+                f"No station fetch failures for owner {owner}",
+                extra={"owner": owner, "stations_count": len(stations), "station_ids": _station_ids(stations)},
+            )
             return stations, {k: v.observations for k, v in obs.items()}
 
+        logger.warning(
+            f"Marking {len(failed_stations)} stations as failed for owner {owner}",
+            extra={
+                "owner": owner,
+                "failed_stations_count": len(failed_stations),
+                "failed_station_ids": _station_ids(failed_stations),
+            },
+        )
         async with self._uow.begin(write=True) as ctx:
             await ctx.stations.update_claimed_stations(
                 failed_stations,  # update filters not claimed stations by it's own
@@ -170,9 +269,16 @@ class RunIngestionIterationUC:
             )
 
         failed_ids = set(station.id for station in failed_stations)
-        return [station for station in stations if station.id not in failed_ids], {
-            k: v.observations for k, v in obs.items() if k not in failed_ids
-        }
+        active_stations = [station for station in stations if station.id not in failed_ids]
+        logger.info(
+            f"Continuing ingestion with {len(active_stations)} active stations for owner {owner}",
+            extra={
+                "owner": owner,
+                "stations_count": len(active_stations),
+                "station_ids": _station_ids(active_stations),
+            },
+        )
+        return active_stations, {k: v.observations for k, v in obs.items() if k not in failed_ids}
 
     async def _insert_observations(
         self, stations: list[Station], station_obs_dict: dict[str, list[RawStationObservation]]
@@ -194,17 +300,35 @@ class RunIngestionIterationUC:
         # Just unwraps the list of lists into a single chain of observations
         obs_c = chain(*([_to_obs(o, station) for o in station_obs_dict[station.id]] for station in stations))
         obs = list(obs_c)
+        logger.info(
+            f"Inserting {len(obs)} observations for {len(stations)} stations into ClickHouse",
+            extra={
+                "observations_count": len(obs),
+                "stations_count": len(stations),
+                "station_ids": _station_ids(stations),
+            },
+        )
 
         stations_error_dict: dict[str, str] = {}
         try:
             await self._click_ctx.stations.insert_raw_observations(obs)
+            logger.info(
+                f"Bulk inserted {len(obs)} observations into ClickHouse",
+                extra={"observations_count": len(obs)},
+            )
         except Exception as e:
-            logger.error(f"Failed to bulk insert observations: {e}, trying to insert one by one")
+            logger.error(
+                f"Failed to bulk insert {len(obs)} observations: {e}, trying to insert one by one",
+                extra={"observations_count": len(obs), "error": str(e)},
+            )
             for ob in obs:
                 try:
                     await self._click_ctx.stations.insert_raw_observations([ob])
                 except Exception as e:
-                    logger.error(f"Failed to insert observation {ob.id}: {e}")
+                    logger.error(
+                        f"Failed to insert observation {ob.id}: {e}",
+                        extra={"observation_id": ob.id, "station_id": ob.station_id, "error": str(e)},
+                    )
                     stations_error_dict[ob.station_id] = str(e)
 
         for station in stations:
@@ -212,31 +336,64 @@ class RunIngestionIterationUC:
                 station.mark_fetch_error(now=now_utc(), error=stations_error_dict[station.id])
             else:
                 station.update_fetch_info(now=now_utc(), observations_fetched=len(station_obs_dict[station.id]))
+        logger.info(
+            f"Prepared station feedback after ClickHouse insert: {len(stations_error_dict)} stations failed",
+            extra={
+                "stations_count": len(stations),
+                "failed_stations_count": len(stations_error_dict),
+                "failed_station_ids": list(stations_error_dict),
+            },
+        )
 
     async def run(self, cmd: RunIngestionIterationCmd) -> bool:
+        logger.info(f"Starting ingestion iteration for owner {cmd.owner}", extra={"owner": cmd.owner})
         stations = await self._claim_stations(owner=cmd.owner)
         if not stations:
+            logger.info(f"Ingestion iteration has no work for owner {cmd.owner}", extra={"owner": cmd.owner})
             return False
 
         async with self._run_heartbeat_loop(stations, owner=cmd.owner) as hb_ctx:
             obs = await self._fetch_observations([station.id for station in stations])
             stations, obs = await self._process_failed_stations(stations, obs, owner=cmd.owner)
             hb_ctx.retain_active(stations)
+            logger.info(
+                f"Retained {len(hb_ctx.leased_stations)} leased stations after fetch processing for owner {cmd.owner}",
+                extra={
+                    "owner": cmd.owner,
+                    "stations_count": len(hb_ctx.leased_stations),
+                    "station_ids": _station_ids(hb_ctx.leased_stations),
+                },
+            )
 
             if hb_ctx.status == _HeartbeatStatus.ERROR:
-                logger.error(f"Heartbeat loop encountered an error: {hb_ctx.error}")
+                logger.error(
+                    f"Heartbeat loop encountered an error for owner {cmd.owner}: {hb_ctx.error}",
+                    extra={"owner": cmd.owner, "error": hb_ctx.error},
+                )
                 return False
             if not hb_ctx.leased_stations:
-                logger.warning("No leased stations left after processing failed stations, stopping ingestion iteration")
+                logger.warning(
+                    f"No leased stations left for owner {cmd.owner}, stopping ingestion iteration",
+                    extra={"owner": cmd.owner},
+                )
                 return False
 
             await self._insert_observations(hb_ctx.leased_stations, obs)
 
+            logger.info(
+                f"Updating ingestion feedback for {len(stations)} stations owned by {cmd.owner}",
+                extra={"owner": cmd.owner, "stations_count": len(stations), "station_ids": _station_ids(stations)},
+            )
             async with self._uow.begin(write=True) as ctx:
                 await ctx.stations.update_claimed_stations(
                     stations,  # update filters not claimed stations by it's own
                     owner=cmd.owner,
                     now=now_utc(),
                 )
+            logger.info(
+                f"Ingestion feedback updated for {len(stations)} stations owned by {cmd.owner}",
+                extra={"owner": cmd.owner, "stations_count": len(stations), "station_ids": _station_ids(stations)},
+            )
 
+        logger.info(f"Ingestion iteration completed for owner {cmd.owner}", extra={"owner": cmd.owner})
         return True
