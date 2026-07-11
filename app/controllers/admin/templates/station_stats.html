@@ -103,36 +103,51 @@
 
 <div id="station-stats-data" hidden>
   {% for item in scores %}
-    <i data-weekday="{{ item.weekday }}" data-hour="{{ item.hour }}" data-score="{{ item.score }}"></i>
+  <i
+    data-weekday="{{ item.weekday }}"
+    data-hour="{{ item.hour }}"
+    data-score="{{ item.score }}"
+  ></i>
   {% endfor %}
 </div>
 
 <script>
   (() => {
-    const scoreElements = document.querySelectorAll("#station-stats-data [data-score]");
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Локальная таймзона";
-    document.getElementById("station-stats-timezone").textContent = timezone;
+    const scoreElements = document.querySelectorAll(
+      '#station-stats-data [data-score]',
+    );
+    const timezone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || 'Локальная таймзона';
+    document.getElementById('station-stats-timezone').textContent = timezone;
 
     // Use the current UTC week so that the browser applies its actual UTC offset,
     // including daylight-saving time where applicable.
     const now = new Date();
     const utcWeekday = now.getUTCDay() || 7;
-    const mondayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - utcWeekday + 1);
+    const mondayUtc = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() - utcWeekday + 1,
+    );
 
     for (const scoreElement of scoreElements) {
       const weekday = Number(scoreElement.dataset.weekday);
       const hour = Number(scoreElement.dataset.hour);
       const score = Number(scoreElement.dataset.score);
-      const localDate = new Date(mondayUtc + ((weekday - 1) * 24 + hour) * 60 * 60 * 1000);
+      const localDate = new Date(
+        mondayUtc + ((weekday - 1) * 24 + hour) * 60 * 60 * 1000,
+      );
       const localWeekday = localDate.getDay() || 7;
       const localHour = localDate.getHours();
-      const cell = document.querySelector(`[data-weekday="${localWeekday}"][data-hour="${localHour}"]`);
+      const cell = document.querySelector(
+        `[data-weekday="${localWeekday}"][data-hour="${localHour}"]`,
+      );
       if (!cell) continue;
 
-      const marker = cell.querySelector(".station-stats__score");
+      const marker = cell.querySelector('.station-stats__score');
       const boundedScore = Math.max(0, Math.min(1, score));
       marker.style.background = `hsl(${boundedScore * 120} 72% 42%)`;
-      marker.title = `${localDate.toLocaleString(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit" })} — ${score.toFixed(2)}`;
+      marker.title = `${localDate.toLocaleString(undefined, { weekday: 'long', hour: '2-digit', minute: '2-digit' })} — ${score.toFixed(2)}`;
     }
   })();
 </script>

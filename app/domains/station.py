@@ -118,24 +118,17 @@ class StationScore:
         else:
             effective_queue_penalty = queue_penalty or 0.0
             effective_bad_queue_probability = bad_queue_probability_when_known or 0.0
-            raw_score = fuel_available_ratio - 0.7 * effective_queue_penalty - 0.2 * effective_bad_queue_probability
+            queue_uncertainty = 1.0 - (queue_data_coverage_when_fuel or 0.0)
+            raw_score = (
+                fuel_available_ratio
+                - 0.7 * effective_queue_penalty
+                - 0.2 * effective_bad_queue_probability
+                - 0.2 * queue_uncertainty * fuel_available_ratio
+            )
             score = cls.clamp_score(raw_score)
 
         return cls(
             hour=hour,
             weekday=weekday,
             score=score,
-        )
-
-    @classmethod
-    def with_normalized_score(cls, score: "StationScore", max_score: float) -> "StationScore":
-        new_score = None
-
-        if score.score is not None:
-            new_score = score.score / max_score if max_score > 0 else 0.0
-
-        return cls(
-            hour=score.hour,
-            weekday=score.weekday,
-            score=new_score,
         )

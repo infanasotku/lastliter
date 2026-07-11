@@ -17,7 +17,7 @@ class GetStationStatsUC:
         if not stats:
             return []
 
-        scores = [
+        return [
             StationScore.calc_score(
                 hour=stat.hour,
                 weekday=stat.weekday,
@@ -30,6 +30,3 @@ class GetStationStatsUC:
             )
             for stat in stats
         ]
-        max_score = max(score.score if score.score is not None else 0 for score in scores)
-
-        return [StationScore.with_normalized_score(score, max_score) for score in scores]
