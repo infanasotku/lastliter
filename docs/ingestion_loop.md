@@ -19,13 +19,19 @@ Stores:
 - last_fetched_at
 - next_fetch_at
 - fetch_interval_sec
-- priority_score (optional)
+- priority
+- lease_until
+- claimed_by
 
-Selection logic:
+Claim logic:
 
-- SELECT stations WHERE next_fetch_at <= now()
-- ORDER BY priority DESC, last_fetched_at ASC
-- FOR UPDATE SKIP LOCKED (multi-worker safe)
+- pick due stations with no active lease:
+  `next_fetch_at <= now()` and `lease_until IS NULL OR lease_until < now()`
+- order by `priority DESC, last_fetched_at ASC`
+- claim via short transaction:
+  `FOR UPDATE SKIP LOCKED` + `lease_until = now() + claim_for` + `claimed_by = worker_id`
+- worker keeps the claim alive with heartbeat while processing
+- feedback update is guarded by `claimed_by` and active `lease_until`
 
 ## [2] Worker (Ingestion Loop / Execution Engine)
 
@@ -33,12 +39,14 @@ Responsible for executing ingestion.
 
 Flow:
 
-- fetch batch of due stations from Postgres
+- claim batch of due stations from Postgres
 - call external API:
   GET /api/comments/{station_id}/recent
 - normalize response → events
 - write events to ClickHouse
-- handle retries + rate limiting
+- update Postgres scheduling feedback for still-owned stations
+- release claim by clearing `lease_until` / `claimed_by`
+- handle per-station errors + rate limiting
 - continue loop (continuous execution)
 
 Important:
@@ -65,13 +73,15 @@ Properties:
 
 ## [4] Postgres (Scheduling Feedback Loop)
 
-After successful ingestion:
+After successful ingestion of still-owned stations:
 
 UPDATE stations SET:
 
 - last_fetched_at = now()
 - next_fetch_at = now() + dynamic_interval
 - fetch_interval_sec = adjusted_value
+- lease_until = NULL
+- claimed_by = NULL
 
 Adjustment rules:
 
@@ -83,8 +93,11 @@ Adjustment rules:
 
 - multiple workers supported
 - safe parallel execution via:
-  FOR UPDATE SKIP LOCKED
-- no duplicate station processing across workers
+  `FOR UPDATE SKIP LOCKED` + expiring leases
+- workers never hold a DB transaction while fetching HTTP or writing ClickHouse
+- if a worker dies, another worker can reclaim stations after `lease_until`
+- if a lease is lost mid-iteration, guarded Postgres feedback prevents stale owner updates
+- duplicate ClickHouse inserts are acceptable; reads must deduplicate immutable events
 
 ## Key properties
 
