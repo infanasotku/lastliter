@@ -13,6 +13,7 @@ logger = get_logger().getChild(__name__)
 
 MIGRATIONS_TABLE = "__schema_migrations"
 BASE_REVISION = "base"
+HEAD_REVISION = "head"
 
 
 @dataclass(frozen=True)
@@ -194,6 +195,14 @@ def get_revision_index(revisions: list[Revision], revision_name: str) -> int:
     raise ClickHouseMigrationError(f"Unknown ClickHouse revision: {revision_name}")
 
 
+def resolve_upgrade_revision(revisions: list[Revision], target_revision: str) -> str:
+    if target_revision != HEAD_REVISION:
+        return target_revision
+    if not revisions:
+        raise ClickHouseMigrationError("Cannot upgrade to head: no ClickHouse revisions found")
+    return revisions[-1].name
+
+
 async def ensure_migrations_table(client: AsyncClient) -> None:
     await client.command(
         f"""
@@ -257,6 +266,7 @@ async def apply_sql_file(client: AsyncClient, sql_path: Path) -> None:
 
 async def upgrade(client: AsyncClient, target_revision: str) -> None:
     revisions = load_revisions()
+    target_revision = resolve_upgrade_revision(revisions, target_revision)
     target_index = get_revision_index(revisions, target_revision)
     current_revision = await get_current_revision(client, revisions)
     current_index = get_revision_index(revisions, current_revision) if current_revision else -1
