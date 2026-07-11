@@ -7,18 +7,28 @@ from starlette.datastructures import URL as StarletteURL
 from starlette.datastructures import FormData
 
 from app.controllers.admin.views.station import StationSyncForm, StationView
-from app.dto.station import StartSyncStationCmd
+from app.domains.station import StationScore
+from app.dto.station import GetStationStatsCmd, StartSyncStationCmd
 from app.infra.common.correlation import RequestContext, with_request_context
 
 
-def make_request(*, method: str = "GET", form: FormData | None = None) -> MagicMock:
+def make_request(
+    *,
+    method: str = "GET",
+    form: FormData | None = None,
+    query_params: dict[str, str] | None = None,
+    path_params: dict[str, str] | None = None,
+) -> MagicMock:
     request = MagicMock()
     request.method = method
     request.form = AsyncMock(return_value=form or FormData())
+    request.query_params = query_params or {}
+    request.path_params = path_params or {}
     request.url_for = MagicMock(
         side_effect=lambda name, **_: StarletteURL(
             {
                 "admin:view-station-sync_stations_form": "http://testserver/station/sync",
+                "admin:view-station-station_stats": "http://testserver/station/stats/station-1",
                 "admin:list": "http://testserver/station/list",
             }[name]
         )
@@ -48,6 +58,45 @@ class TestStationViewSyncStationsFormAction:
         request.url_for.assert_called_once_with("admin:view-station-sync_stations_form")
         assert response.status_code == 303
         assert response.headers["location"] == "http://testserver/station/sync"
+
+
+class TestStationViewStationStats:
+    @pytest.mark.asyncio
+    async def test_redirects_action_to_station_stats_page(self):
+        view = StationView()
+        request = make_request(query_params={"pks": "station-1"})
+
+        response = await view.station_stats_action(request)
+
+        request.url_for.assert_called_once_with("admin:view-station-station_stats", station_id="station-1")
+        assert response.status_code == 303
+        assert response.headers["location"] == "http://testserver/station/stats/station-1"
+
+    @pytest.mark.asyncio
+    async def test_renders_station_stats_page(self):
+        view = StationView()
+        view.get_stats = AsyncMock(
+            return_value=[
+                StationScore(hour=8, weekday=1, score=0.7, confidence=0.5),
+                StationScore(hour=9, weekday=2, score=None, confidence=0.1),
+            ]
+        )
+        template_response = MagicMock()
+        template_response_mock = mock_templates(view, template_response)
+        request = make_request(path_params={"station_id": "station-1"})
+
+        response = await view.station_stats(request)
+
+        assert response is template_response
+        view.get_stats.assert_awaited_once_with(GetStationStatsCmd(station_id="station-1"))
+        _, template_name, context = awaited_args(template_response_mock)
+        assert template_name == "station_stats.html"
+        assert context["station_id"] == "station-1"
+        assert context["scores"] == [
+            {"confidence": 0.5, "hour": 8, "score": 0.7, "weekday": 1},
+            {"confidence": 0.1, "hour": 9, "score": None, "weekday": 2},
+        ]
+        assert context["list_url"] == "http://testserver/station/list"
 
 
 class TestStationViewSyncStationsForm:

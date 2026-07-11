@@ -7,9 +7,11 @@ from pytest import fixture
 
 from app.domains.station import Station
 from app.dto.station import (
+    GetStationStatsCmd,
     RawStationObservation,
     RunIngestionIterationCmd,
     StartSyncStationCmd,
+    StationHourlyStats,
     SyncStationCmd,
     SyncStationResult,
 )
@@ -185,6 +187,61 @@ class TestStationServiceStartSyncStations:
             },
             task_id="request-id",
         )
+
+
+class TestStationServiceGetStationStats:
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_when_clickhouse_has_no_stats(
+        self,
+        svc: StationService,
+        click_ctx: MagicMock,
+    ):
+        click_ctx.stations.get_station_hourly_stats = AsyncMock(return_value=[])
+
+        result = await svc.get_station_stats(GetStationStatsCmd(station_id="station-1"))
+
+        assert result == []
+        click_ctx.stations.get_station_hourly_stats.assert_awaited_once_with(station_id="station-1")
+
+    @pytest.mark.asyncio
+    async def test_calculates_scores_from_hourly_stats(
+        self,
+        svc: StationService,
+        click_ctx: MagicMock,
+    ):
+        click_ctx.stations.get_station_hourly_stats = AsyncMock(
+            return_value=[
+                StationHourlyStats(
+                    weekday=1,
+                    hour=8,
+                    observations_count=10,
+                    fuel_available_ratio=0.8,
+                    queue_probability_when_known=0.5,
+                    queue_data_coverage_when_fuel=0.75,
+                    bad_queue_probability_when_known=0.25,
+                    avg_queue_severity_when_fuel=2.0,
+                ),
+                StationHourlyStats(
+                    weekday=2,
+                    hour=9,
+                    observations_count=3,
+                    fuel_available_ratio=None,
+                    queue_probability_when_known=None,
+                    queue_data_coverage_when_fuel=None,
+                    bad_queue_probability_when_known=None,
+                    avg_queue_severity_when_fuel=None,
+                ),
+            ]
+        )
+
+        result = await svc.get_station_stats(GetStationStatsCmd(station_id="station-1"))
+
+        assert [score.hour for score in result] == [8, 9]
+        assert [score.weekday for score in result] == [1, 2]
+        assert result[0].score == pytest.approx(0.57875)
+        assert result[0].confidence == pytest.approx(0.575)
+        assert result[1].score is None
+        assert result[1].confidence == pytest.approx(0.105)
 
 
 class TestStationServiceRunIngestionIteration:

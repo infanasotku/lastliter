@@ -2,7 +2,7 @@ from app.dto.station import InsertObservation, StationHourlyStats
 from app.infra.clickhouse.repositories.base import ClickHouseRepository
 
 _OBS_TABLE = "station_observations_raw"
-_HOURLY_STATS_VIEW = "default.station_hourly_stats_v"
+_HOURLY_STATS_VIEW = "station_hourly_stats_v"
 
 
 class ClickStationRepository(ClickHouseRepository):
