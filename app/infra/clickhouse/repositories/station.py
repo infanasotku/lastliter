@@ -73,7 +73,6 @@ class ClickStationRepository(ClickHouseRepository):
             WHERE station_id = '{station_id}'
               AND observed_at >= '{start_time.isoformat()}'
               AND observed_at < '{end_time.isoformat()}'
-            GROUP BY hour
             ORDER BY hour
             """
         )
