@@ -6,7 +6,8 @@ from wtforms import FloatField, Form
 from wtforms.validators import InputRequired, NumberRange
 
 from app.container import Container
-from app.dto.station import StartSyncStationCmd
+from app.domains.station import StationScore
+from app.dto.station import GetStationStatsCmd, StartSyncStationCmd
 from app.infra.common.correlation import get_request_context
 from app.infra.logging import get_logger
 from app.infra.postgres.models.station import Station
@@ -62,6 +63,51 @@ class StationView(ModelView, model=Station):
     column_list = "__all__"
     column_details_list = column_list
     page_size = 25
+
+    @action(
+        "station-stats",
+        label="Statistics",
+        add_in_detail=True,
+        add_in_list=False,
+    )
+    async def station_stats_action(self, request: Request) -> Response:
+        station_id = request.query_params.get("pks", "").split(",", maxsplit=1)[0]
+        if not station_id:
+            return RedirectResponse(self._stations_list_url(request), status_code=303)
+
+        return RedirectResponse(self._station_stats_url(request, station_id), status_code=303)
+
+    @expose("/stats/{station_id}", methods=["GET"])
+    async def station_stats(self, request: Request) -> Response:
+        station_id = request.path_params["station_id"]
+        scores = await self.get_stats(GetStationStatsCmd(station_id=station_id))
+
+        return await self.templates.TemplateResponse(
+            request,
+            "station_stats.html",
+            {
+                "hours": range(24),
+                "list_url": self._stations_list_url(request),
+                "model_view": self,
+                "scores": [{"hour": score.hour, "score": score.score, "weekday": score.weekday} for score in scores],
+                "station_id": station_id,
+                "subtitle": self.name_plural,
+                "title": f"Station {station_id} statistics",
+                "weekdays": enumerate(
+                    ("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"),
+                    start=1,
+                ),
+            },
+        )
+
+    @inject
+    async def get_stats(
+        self,
+        cmd: GetStationStatsCmd,
+        #
+        svc: StationService = Provide[Container.station_service],
+    ) -> list[StationScore]:
+        return await svc.get_station_stats(cmd)
 
     @action(
         "sync-stations-form",
@@ -133,3 +179,11 @@ class StationView(ModelView, model=Station):
 
     def _stations_list_url(self, request: Request) -> str:
         return str(request.url_for("admin:list", identity=self.identity))
+
+    def _station_stats_url(self, request: Request, station_id: str) -> str:
+        return str(
+            request.url_for(
+                f"admin:view-{self.identity}-station_stats",
+                station_id=station_id,
+            )
+        )

@@ -55,7 +55,43 @@ class StationScore:
     hour: int
     weekday: int
 
-    score: float
+    score: float | None
+
+    @staticmethod
+    def calculate_queue_penalty(
+        *,
+        queue_probability_when_known: float | None,
+        queue_data_coverage_when_fuel: float | None,
+        avg_queue_severity_when_fuel: float | None,
+    ) -> float | None:
+        if queue_probability_when_known is None:
+            return None
+
+        queue_coverage = queue_data_coverage_when_fuel or 0.0
+        if avg_queue_severity_when_fuel is None:
+            normalized_avg_queue_severity = 0.5
+        else:
+            normalized_avg_queue_severity = avg_queue_severity_when_fuel / 4
+
+        return queue_probability_when_known * normalized_avg_queue_severity * queue_coverage
+
+    @staticmethod
+    def calculate_confidence(
+        *,
+        observations_count: int | None,
+        queue_data_coverage_when_fuel: float | None,
+    ) -> float | None:
+        if observations_count is None:
+            return None
+
+        sample_confidence = min(observations_count / 20, 1.0)
+        queue_coverage = queue_data_coverage_when_fuel or 0.0
+
+        return 0.7 * sample_confidence + 0.3 * queue_coverage
+
+    @staticmethod
+    def clamp_score(score: float) -> float:
+        return max(0.0, score)
 
     @classmethod
     def calc_score(
@@ -64,16 +100,26 @@ class StationScore:
         hour: int,
         weekday: int,
         #
-        fuel_available_ratio: float,
-        queue_probability_when_known: float,
-        normalized_avg_queue_severity: float,
-        queue_data_coverage_when_fuel: float,
-        bad_queue_probability_when_known: float,
-        avg_queue_severity_when_fuel: float,
+        fuel_available_ratio: float | None,
+        queue_probability_when_known: float | None,
+        queue_data_coverage_when_fuel: float | None,
+        bad_queue_probability_when_known: float | None,
+        avg_queue_severity_when_fuel: float | None,
     ) -> Self:
-        queue_penalty = queue_probability_when_known * normalized_avg_queue_severity * queue_data_coverage_when_fuel
-        normalized_avg_queue_severity = avg_queue_severity_when_fuel / 4
-        score = fuel_available_ratio - 0.7 * queue_penalty - 0.2 * bad_queue_probability_when_known
+        queue_penalty = cls.calculate_queue_penalty(
+            queue_probability_when_known=queue_probability_when_known,
+            queue_data_coverage_when_fuel=queue_data_coverage_when_fuel,
+            avg_queue_severity_when_fuel=avg_queue_severity_when_fuel,
+        )
+
+        if fuel_available_ratio is None:
+            score = None
+
+        else:
+            effective_queue_penalty = queue_penalty or 0.0
+            effective_bad_queue_probability = bad_queue_probability_when_known or 0.0
+            raw_score = fuel_available_ratio - 0.7 * effective_queue_penalty - 0.2 * effective_bad_queue_probability
+            score = cls.clamp_score(raw_score)
 
         return cls(
             hour=hour,
@@ -83,8 +129,13 @@ class StationScore:
 
     @classmethod
     def with_normalized_score(cls, score: "StationScore", max_score: float) -> "StationScore":
+        new_score = None
+
+        if score.score is not None:
+            new_score = score.score / max_score if max_score > 0 else 0.0
+
         return cls(
             hour=score.hour,
             weekday=score.weekday,
-            score=score.score / max_score,
+            score=new_score,
         )

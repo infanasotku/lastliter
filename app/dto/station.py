@@ -48,12 +48,12 @@ class StationHourlyStats(BaseModel):
     weekday: int
 
     observations_count: int
-    fuel_available_ratio: float
-    queue_probability_when_known: float
-    normalized_avg_queue_severity: float
-    queue_data_coverage_when_fuel: float
-    bad_queue_probability_when_known: float
-    avg_queue_severity_when_fuel: float
+
+    fuel_available_ratio: float | None
+    queue_probability_when_known: float | None
+    queue_data_coverage_when_fuel: float | None
+    bad_queue_probability_when_known: float | None
+    avg_queue_severity_when_fuel: float | None
 
     model_config = ConfigDict(from_attributes=True)
 

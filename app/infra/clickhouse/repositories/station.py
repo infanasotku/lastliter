@@ -2,7 +2,7 @@ from app.dto.station import InsertObservation, StationHourlyStats
 from app.infra.clickhouse.repositories.base import ClickHouseRepository
 
 _OBS_TABLE = "station_observations_raw"
-_HOURLY_STATS_VIEW = "station_hourly_stats_v"
+_HOURLY_STATS_VIEW = "default.station_hourly_stats_v"
 
 
 class ClickStationRepository(ClickHouseRepository):
@@ -64,10 +64,30 @@ class ClickStationRepository(ClickHouseRepository):
     ) -> list[StationHourlyStats]:
         result = await self._client.query(
             f"""
-            SELECT *
+            SELECT
+                weekday,
+                hour,
+                observations_count,
+                fuel_available_ratio,
+                queue_probability_when_known,
+                queue_data_coverage_when_fuel,
+                bad_queue_probability_when_known,
+                avg_queue_severity_when_fuel
             FROM {_HOURLY_STATS_VIEW}
             WHERE station_id = '{station_id}'
             ORDER BY hour
             """
         )
-        return [StationHourlyStats.model_validate(row) for row in result.result_rows]
+        return [
+            StationHourlyStats(
+                weekday=row[0],
+                hour=row[1],
+                observations_count=row[2],
+                fuel_available_ratio=row[3],
+                queue_probability_when_known=row[4],
+                queue_data_coverage_when_fuel=row[5],
+                bad_queue_probability_when_known=row[6],
+                avg_queue_severity_when_fuel=row[7],
+            )
+            for row in result.result_rows
+        ]
