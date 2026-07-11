@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Self
 
 DEFAULT_FETCH_INTERVAL_SEC = 300  # 5 minutes
 FETCH_INTERVAL_AFTER_ERROR_SEC = 600  # 10 minutes
@@ -47,3 +48,43 @@ class Station:
         self.last_fetched_at = now
         self.next_fetch_at = now + timedelta(seconds=FETCH_INTERVAL_AFTER_ERROR_SEC)
         self.fetch_error = error
+
+
+@dataclass(frozen=True)
+class StationScore:
+    hour: int
+    weekday: int
+
+    score: float
+
+    @classmethod
+    def calc_score(
+        cls,
+        *,
+        hour: int,
+        weekday: int,
+        #
+        fuel_available_ratio: float,
+        queue_probability_when_known: float,
+        normalized_avg_queue_severity: float,
+        queue_data_coverage_when_fuel: float,
+        bad_queue_probability_when_known: float,
+        avg_queue_severity_when_fuel: float,
+    ) -> Self:
+        queue_penalty = queue_probability_when_known * normalized_avg_queue_severity * queue_data_coverage_when_fuel
+        normalized_avg_queue_severity = avg_queue_severity_when_fuel / 4
+        score = fuel_available_ratio - 0.7 * queue_penalty - 0.2 * bad_queue_probability_when_known
+
+        return cls(
+            hour=hour,
+            weekday=weekday,
+            score=score,
+        )
+
+    @classmethod
+    def with_normalized_score(cls, score: "StationScore", max_score: float) -> "StationScore":
+        return cls(
+            hour=score.hour,
+            weekday=score.weekday,
+            score=score.score / max_score,
+        )

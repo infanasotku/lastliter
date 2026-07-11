@@ -1,7 +1,10 @@
-from app.dto.station import InsertObservation
+from datetime import datetime
+
+from app.dto.station import InsertObservation, StationHourlyStats
 from app.infra.clickhouse.repositories.base import ClickHouseRepository
 
 _OBS_TABLE = "station_observations_raw"
+_HOURLY_STATS_VIEW = "station_hourly_stats_v"
 
 
 class ClickStationRepository(ClickHouseRepository):
@@ -56,3 +59,22 @@ class ClickStationRepository(ClickHouseRepository):
                 "on_site",
             ],
         )
+
+    async def get_station_hourly_stats(
+        self,
+        station_id: str,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> list[StationHourlyStats]:
+        result = await self._client.query(
+            f"""
+            SELECT *
+            FROM {_HOURLY_STATS_VIEW}
+            WHERE station_id = '{station_id}'
+              AND observed_at >= '{start_time.isoformat()}'
+              AND observed_at < '{end_time.isoformat()}'
+            GROUP BY hour
+            ORDER BY hour
+            """
+        )
+        return [StationHourlyStats.model_validate(row) for row in result.result_rows]
