@@ -32,6 +32,7 @@ class Station:
     last_fetched_at: datetime
     next_fetch_at: datetime
     fetch_interval_sec: int
+    description: str | None = None
     fetch_error: str | None = None
     priority: int = 0
 

@@ -13,6 +13,7 @@ class Station(Base):
 
     name: Mapped[str] = mapped_column(nullable=False)
     address: Mapped[str] = mapped_column(nullable=False)
+    description: Mapped[str | None] = mapped_column(nullable=True)
 
     lat: Mapped[float] = mapped_column(nullable=False)
     lon: Mapped[float] = mapped_column(nullable=False)
