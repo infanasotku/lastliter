@@ -21,6 +21,7 @@ class GetStationStatsUC:
             StationScore.calc_score(
                 hour=stat.hour,
                 weekday=stat.weekday,
+                observations_count=stat.observations_count,
                 #
                 fuel_available_ratio=stat.fuel_available_ratio,
                 queue_probability_when_known=stat.queue_probability_when_known,

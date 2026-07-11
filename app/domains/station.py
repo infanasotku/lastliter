@@ -56,6 +56,7 @@ class StationScore:
     weekday: int
 
     score: float | None
+    confidence: float | None = None
 
     @staticmethod
     def calculate_queue_penalty(
@@ -78,12 +79,9 @@ class StationScore:
     @staticmethod
     def calculate_confidence(
         *,
-        observations_count: int | None,
+        observations_count: int,
         queue_data_coverage_when_fuel: float | None,
     ) -> float | None:
-        if observations_count is None:
-            return None
-
         sample_confidence = min(observations_count / 20, 1.0)
         queue_coverage = queue_data_coverage_when_fuel or 0.0
 
@@ -100,6 +98,7 @@ class StationScore:
         hour: int,
         weekday: int,
         #
+        observations_count: int,
         fuel_available_ratio: float | None,
         queue_probability_when_known: float | None,
         queue_data_coverage_when_fuel: float | None,
@@ -127,8 +126,13 @@ class StationScore:
             )
             score = cls.clamp_score(raw_score)
 
+        confidence = cls.calculate_confidence(
+            observations_count=observations_count, queue_data_coverage_when_fuel=queue_data_coverage_when_fuel
+        )
+
         return cls(
             hour=hour,
             weekday=weekday,
             score=score,
+            confidence=confidence,
         )

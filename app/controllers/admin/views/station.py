@@ -89,7 +89,15 @@ class StationView(ModelView, model=Station):
                 "hours": range(24),
                 "list_url": self._stations_list_url(request),
                 "model_view": self,
-                "scores": [{"hour": score.hour, "score": score.score, "weekday": score.weekday} for score in scores],
+                "scores": [
+                    {
+                        "confidence": score.confidence,
+                        "hour": score.hour,
+                        "score": score.score,
+                        "weekday": score.weekday,
+                    }
+                    for score in scores
+                ],
                 "station_id": station_id,
                 "subtitle": self.name_plural,
                 "title": f"Station {station_id} statistics",
