@@ -7,20 +7,22 @@ import httpx
 from app.domains.station import Station
 from app.dto.station import RawStationObservation
 from app.infra.common.time import now_utc
+from app.infra.config.gdebenz import GdebenzSettings
 
 BASE_URL = "https://www.gdebenz.ru/api"
 STATIONS_PATH = "/stations"
-EVENTS_PATH = "/comments/{id}/recent?limit={limit}"
+EVENTS_PATH = "/comments/{id}/recent?limit={limit}&fp={fingerprint}"
 
 
 class HTTPGdeBenzClient:
-    def __init__(self) -> None:
+    def __init__(self, settings: GdebenzSettings) -> None:
         self._client = httpx.AsyncClient(
             http2=True,
             headers={
                 "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
             },
         )
+        self._settings = settings
 
     async def get_stations(
         self,
@@ -55,7 +57,7 @@ class HTTPGdeBenzClient:
         return [_to_station(row) for row in rows]
 
     async def get_obs_by_id(self, id: str, limit: int = 10) -> list[RawStationObservation]:
-        url = f"{BASE_URL}{EVENTS_PATH.format(id=id, limit=limit)}"
+        url = f"{BASE_URL}{EVENTS_PATH.format(id=id, limit=limit, fingerprint=self._settings.fingerprint)}"
 
         r = await self._client.get(url)
         r.raise_for_status()
@@ -74,7 +76,7 @@ class HTTPGdeBenzClient:
 
 
 @asynccontextmanager
-async def create_gdebenz_client() -> AsyncGenerator[HTTPGdeBenzClient]:
-    client = HTTPGdeBenzClient()
+async def create_gdebenz_client(settings: GdebenzSettings) -> AsyncGenerator[HTTPGdeBenzClient]:
+    client = HTTPGdeBenzClient(settings=settings)
     async with client._client:
         yield client

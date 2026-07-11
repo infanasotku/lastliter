@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.infra.config.admin import AdminSettings
 from app.infra.config.clickhouse import ClickhouseSettings
+from app.infra.config.gdebenz import GdebenzSettings
 from app.infra.config.postgres import PostgreSQLSettings
 from app.infra.config.rabbitmq import RabbitMQSettings
 from app.infra.config.redis import RedisSettings
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
     redis: RedisSettings
     rabbitmq: RabbitMQSettings
     clickhouse: ClickhouseSettings
+    gdebenz: GdebenzSettings
 
     model_config = SettingsConfigDict(env_nested_delimiter="__")
 
@@ -38,6 +40,7 @@ class TestSettings(Settings):
     clickhouse: ClickhouseSettings = ClickhouseSettings(
         dsn=ClickHouseDsn("clickhousedb://default:default@localhost:8123/default")
     )
+    gdebenz: GdebenzSettings = GdebenzSettings(fingerprint="test_fingerprint")
 
 
 def generate_settings():

@@ -43,7 +43,7 @@ class Container(containers.DeclarativeContainer):
     station_ctx = providers.Singleton(ClickStationContext, clickhouse_client)
 
     # HTTP
-    gdebenz = providers.Resource(create_gdebenz_client)
+    gdebenz = providers.Resource(create_gdebenz_client, settings.provided.gdebenz)
 
     # Svc
     station_service = providers.Factory(

@@ -3,3 +3,6 @@ container:
 resources:
   requests: {cpu: 100m, memory: 128Mi}
   limits: {cpu: 500m, memory: 256Mi}
+
+config:
+  GDEBENZ__FINGERPRINT: 4ba88e08e59356e7a7726e4f1d13a5ca1578b3b46ac77ada852ae3e616d5de2a
