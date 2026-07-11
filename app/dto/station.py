@@ -60,5 +60,3 @@ class StationHourlyStats(BaseModel):
 
 class GetStationStatsCmd(BaseModel):
     station_id: str
-    start_time: datetime
-    end_time: datetime

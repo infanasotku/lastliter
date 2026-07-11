@@ -13,8 +13,6 @@ class GetStationStatsUC:
     async def run(self, cmd: GetStationStatsCmd) -> list[StationScore]:
         stats = await self._click_ctx.stations.get_station_hourly_stats(
             station_id=cmd.station_id,
-            start_time=cmd.start_time,
-            end_time=cmd.end_time,
         )
         if not stats:
             return []
