@@ -1,17 +1,30 @@
-{% extends "sqladmin/layout.html" %}
-
-{% block content %}
+{% extends "sqladmin/layout.html" %} {% block content %}
 <style>
-  .station-stats { max-width: 1180px; margin: 0 auto; }
-  .station-stats__table { min-width: 1040px; table-layout: fixed; }
-  .station-stats__table th { font-size: .75rem; text-align: center; }
-  .station-stats__table th:first-child { width: 120px; text-align: left; }
-  .station-stats__cell { padding: .3rem !important; text-align: center; }
+  .station-stats {
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .station-stats__table {
+    min-width: 1040px;
+    table-layout: fixed;
+  }
+  .station-stats__table th {
+    font-size: 0.75rem;
+    text-align: center;
+  }
+  .station-stats__table th:first-child {
+    width: 120px;
+    text-align: left;
+  }
+  .station-stats__cell {
+    padding: 0.3rem !important;
+    text-align: center;
+  }
   .station-stats__score {
     display: inline-block;
     width: 25px;
     height: 25px;
-    border: 1px solid rgba(0, 0, 0, .08);
+    border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 5px;
     background: #d7dce1;
   }
@@ -20,7 +33,12 @@
     width: 140px;
     height: 12px;
     border-radius: 6px;
-    background: linear-gradient(90deg, hsl(0 72% 48%), hsl(60 72% 48%), hsl(120 72% 38%));
+    background: linear-gradient(
+      90deg,
+      hsl(0 72% 48%),
+      hsl(60 72% 48%),
+      hsl(120 72% 38%)
+    );
   }
 </style>
 
@@ -30,7 +48,9 @@
       <div>
         <h3 class="card-title">Недельная статистика станции</h3>
         <div class="text-secondary">ID: {{ station_id }}</div>
-        <div class="text-secondary">Время: <span id="station-stats-timezone">определяется…</span></div>
+        <div class="text-secondary">
+          Время: <span id="station-stats-timezone">определяется…</span>
+        </div>
       </div>
     </div>
     <div class="card-body">
@@ -39,7 +59,9 @@
           <thead>
             <tr>
               <th>День</th>
-              {% for hour in hours %}<th>{{ "%02d"|format(hour) }}</th>{% endfor %}
+              {% for hour in hours %}
+              <th>{{ "%02d"|format(hour) }}</th>
+              {% endfor %}
             </tr>
           </thead>
           <tbody>
@@ -47,27 +69,47 @@
             <tr>
               <th>{{ weekday_name }}</th>
               {% for hour in hours %}
-                <td class="station-stats__cell" data-weekday="{{ weekday }}" data-hour="{{ hour }}">
-                  <span class="station-stats__score" title="Нет данных"></span>
-                </td>
+              <td
+                class="station-stats__cell"
+                data-weekday="{{ weekday }}"
+                data-hour="{{ hour }}"
+              >
+                <span class="station-stats__score" title="Нет данных"></span>
+              </td>
               {% endfor %}
             </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-      <div class="d-flex align-items-center justify-content-center gap-2 mt-3 text-secondary">
-        <span>Низкий score</span><span class="station-stats__legend-gradient"></span><span>Высокий score</span>
-        <span class="station-stats__score ms-3" style="width: 14px; height: 14px"></span><span>Нет данных</span>
+      <div
+        class="d-flex align-items-center justify-content-center gap-2 mt-3 text-secondary"
+      >
+        <span>Лучше посидеть дома</span
+        ><span class="station-stats__legend-gradient"></span
+        ><span>Надо ехать</span>
+        <span
+          class="station-stats__score ms-3"
+          style="width: 14px; height: 14px"
+        ></span
+        ><span>Нет данных</span>
       </div>
-      <div class="mt-4"><a href="{{ list_url }}" class="btn">К списку станций</a></div>
+      <div class="mt-4">
+        <a href="{{ list_url }}" class="btn">К списку станций</a>
+      </div>
     </div>
   </div>
 </div>
 
+<div id="station-stats-data" hidden>
+  {% for item in scores %}
+    <i data-weekday="{{ item.weekday }}" data-hour="{{ item.hour }}" data-score="{{ item.score }}"></i>
+  {% endfor %}
+</div>
+
 <script>
   (() => {
-    const scores = {{ scores | tojson }};
+    const scoreElements = document.querySelectorAll("#station-stats-data [data-score]");
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Локальная таймзона";
     document.getElementById("station-stats-timezone").textContent = timezone;
 
@@ -77,17 +119,20 @@
     const utcWeekday = now.getUTCDay() || 7;
     const mondayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - utcWeekday + 1);
 
-    for (const item of scores) {
-      const localDate = new Date(mondayUtc + ((item.weekday - 1) * 24 + item.hour) * 60 * 60 * 1000);
+    for (const scoreElement of scoreElements) {
+      const weekday = Number(scoreElement.dataset.weekday);
+      const hour = Number(scoreElement.dataset.hour);
+      const score = Number(scoreElement.dataset.score);
+      const localDate = new Date(mondayUtc + ((weekday - 1) * 24 + hour) * 60 * 60 * 1000);
       const localWeekday = localDate.getDay() || 7;
       const localHour = localDate.getHours();
       const cell = document.querySelector(`[data-weekday="${localWeekday}"][data-hour="${localHour}"]`);
       if (!cell) continue;
 
       const marker = cell.querySelector(".station-stats__score");
-      const boundedScore = Math.max(0, Math.min(1, item.score));
+      const boundedScore = Math.max(0, Math.min(1, score));
       marker.style.background = `hsl(${boundedScore * 120} 72% 42%)`;
-      marker.title = `${localDate.toLocaleString(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit" })} — ${item.score.toFixed(2)}`;
+      marker.title = `${localDate.toLocaleString(undefined, { weekday: "long", hour: "2-digit", minute: "2-digit" })} — ${score.toFixed(2)}`;
     }
   })();
 </script>
