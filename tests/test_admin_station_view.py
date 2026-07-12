@@ -8,7 +8,7 @@ from starlette.datastructures import FormData
 
 from app.controllers.admin.views.station import StationSyncForm, StationView
 from app.domains.station import StationScore
-from app.dto.station import GetStationStatsCmd, StartSyncStationCmd
+from app.dto.station import GetStationStatsCmd, StartSyncStationCmd, SyncStationFilters
 from app.infra.common.correlation import RequestContext, with_request_context
 
 
@@ -130,6 +130,7 @@ class TestStationViewSyncStationsForm:
                     "lon1": "82.2",
                     "lat2": "56.3",
                     "lon2": "83.4",
+                    "by_name": "  Gazprom  ",
                 }
             ),
         )
@@ -144,6 +145,7 @@ class TestStationViewSyncStationsForm:
                 lat2=56.3,
                 lon2=83.4,
                 correlation_id="request-id",
+                filters=SyncStationFilters(by_name="Gazprom"),
             )
         )
         request.url_for.assert_called_with("admin:list", identity="station")
@@ -185,6 +187,7 @@ class TestStationViewBuildSyncStationsCmd:
                     "lon1": "82.2",
                     "lat2": "56.3",
                     "lon2": "83.4",
+                    "by_name": "  Gazprom  ",
                 }
             )
         )
@@ -199,6 +202,7 @@ class TestStationViewBuildSyncStationsCmd:
             lat2=56.3,
             lon2=83.4,
             correlation_id="request-id",
+            filters=SyncStationFilters(by_name="Gazprom"),
         )
 
     def test_raises_when_form_data_is_missing(self):

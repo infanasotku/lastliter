@@ -13,6 +13,7 @@ from app.dto.station import (
     StartSyncStationCmd,
     StationHourlyStats,
     SyncStationCmd,
+    SyncStationFilters,
     SyncStationResult,
 )
 from app.services.station import StationService
@@ -133,6 +134,33 @@ class TestStationServiceSyncStations:
         )
 
     @pytest.mark.asyncio
+    async def test_filters_stations_by_name(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        station_ctx.stations.insert_many_safe.return_value = 1
+        matching_station = make_station("station-1", name="Gazprom")
+        other_station = make_station("station-2", name="Lukoil")
+        gdebenz.get_stations.return_value = [
+            matching_station,
+            other_station,
+        ]
+        cmd = SyncStationCmd(
+            lat1=55,
+            lon1=82,
+            lat2=56,
+            lon2=83,
+            filters=SyncStationFilters(by_name="gaz"),
+        )
+
+        result = await svc.sync_stations(cmd)
+
+        assert result == SyncStationResult(new=1)
+        station_ctx.stations.insert_many_safe.assert_awaited_once_with([matching_station])
+
+    @pytest.mark.asyncio
     async def test_returns_zero_when_all_stations_are_filtered_out(
         self,
         svc: StationService,
@@ -172,6 +200,7 @@ class TestStationServiceStartSyncStations:
             lat2=56,
             lon2=83,
             correlation_id="request-id",
+            filters=SyncStationFilters(by_name="Gazprom"),
         )
 
         await svc.start_sync_stations(cmd)
@@ -183,6 +212,9 @@ class TestStationServiceStartSyncStations:
                     "lon1": 82.0,
                     "lat2": 56.0,
                     "lon2": 83.0,
+                    "filters": {
+                        "by_name": "Gazprom",
+                    },
                 }
             },
             task_id="request-id",

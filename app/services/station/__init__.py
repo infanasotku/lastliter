@@ -1,5 +1,5 @@
 from app.contracts.uow import UnitOfWork
-from app.domains.station import StationScore
+from app.domains.station import Station, StationScore
 from app.dto.station import (
     GetStationStatsCmd,
     RunIngestionIterationCmd,
@@ -41,6 +41,7 @@ class StationService:
                 "lon1": cmd.lon1,
                 "lat2": cmd.lat2,
                 "lon2": cmd.lon2,
+                "filters": cmd.filters.model_dump(),
             },
         )
         req = SyncStationRequest(
@@ -48,6 +49,7 @@ class StationService:
             lon1=cmd.lon1,
             lat2=cmd.lat2,
             lon2=cmd.lon2,
+            filters=cmd.filters,
         )
         sync_stations_task.apply_async(kwargs={"req": req.model_dump()}, task_id=cmd.correlation_id)
         logger.info(
@@ -63,6 +65,7 @@ class StationService:
                 "lon1": cmd.lon1,
                 "lat2": cmd.lat2,
                 "lon2": cmd.lon2,
+                "filters": cmd.filters.model_dump(),
             },
         )
         stations = await self._gdebenz.get_stations(
@@ -71,11 +74,22 @@ class StationService:
             lat2=cmd.lat2,
             lon2=cmd.lon2,
         )
-        filtered_stations = [s for s in stations if s.address != "" and s.name != ""]
+
+        def filter_station(s: Station) -> bool:
+            if not s.address or not s.name:
+                return False
+
+            if cmd.filters.by_name is not None:
+                return cmd.filters.by_name.lower() in s.name.lower()
+
+            return True
+
+        filtered_stations = [s for s in stations if filter_station(s)]
         logger.info(
             f"Fetched {len(stations)} stations, {len(filtered_stations)} passed validation",
             extra={
                 "fetched_count": len(stations),
+                "by_name": cmd.filters.by_name,
                 "valid_count": len(filtered_stations),
                 "skipped_count": len(stations) - len(filtered_stations),
             },
@@ -93,6 +107,8 @@ class StationService:
         return SyncStationResult(
             new=inserted_stations,
         )
+
+    # Single UC
 
     async def run_ingestion_iteration(self, cmd: RunIngestionIterationCmd) -> bool:
         from app.services.station.ingestion import RunIngestionIterationUC

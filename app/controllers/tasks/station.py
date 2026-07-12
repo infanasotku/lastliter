@@ -1,9 +1,9 @@
 from celery import shared_task
 from dependency_injector.wiring import Provide, inject
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.container import Container
-from app.dto.station import SyncStationCmd
+from app.dto.station import SyncStationCmd, SyncStationFilters
 from app.infra.celery.runtime import get_runtime
 from app.infra.celery.task import as_task
 from app.infra.logging import get_logger
@@ -17,6 +17,7 @@ class SyncStationRequest(BaseModel):
     lon1: float
     lat2: float
     lon2: float
+    filters: SyncStationFilters = Field(default_factory=SyncStationFilters)
 
 
 @as_task
@@ -30,6 +31,7 @@ def sync_stations_task(req: SyncStationRequest | dict):
             "lon1": sync_req.lon1,
             "lat2": sync_req.lat2,
             "lon2": sync_req.lon2,
+            "filters": sync_req.filters.model_dump(),
         },
     )
     get_runtime().run(sync_stations(sync_req))
@@ -48,6 +50,7 @@ async def sync_stations(
             "lon1": req.lon1,
             "lat2": req.lat2,
             "lon2": req.lon2,
+            "filters": req.filters.model_dump(),
         },
     )
     result = await svc.sync_stations(SyncStationCmd.model_validate(req.model_dump()))

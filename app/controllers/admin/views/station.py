@@ -2,12 +2,12 @@ from dependency_injector.wiring import Provide, inject
 from sqladmin import ModelView, action, expose
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
-from wtforms import FloatField, Form
-from wtforms.validators import InputRequired, NumberRange
+from wtforms import FloatField, Form, StringField
+from wtforms.validators import InputRequired, NumberRange, Optional
 
 from app.container import Container
 from app.domains.station import StationScore
-from app.dto.station import GetStationStatsCmd, StartSyncStationCmd
+from app.dto.station import GetStationStatsCmd, StartSyncStationCmd, SyncStationFilters
 from app.infra.common.correlation import get_request_context
 from app.infra.logging import get_logger
 from app.infra.postgres.models.station import Station
@@ -17,6 +17,12 @@ logger = get_logger().getChild(__name__)
 
 
 class StationSyncForm(Form):
+    by_name = StringField(
+        "Name filter",
+        validators=[Optional()],
+        description="Optional station name substring.",
+        render_kw={"class": "form-control"},
+    )
     lat1 = FloatField(
         "Latitude 1",
         validators=[
@@ -134,6 +140,7 @@ class StationView(ModelView, model=Station):
             logger.info(
                 f"Admin requested station sync for bounds ({cmd.lat1}, {cmd.lon1}) - ({cmd.lat2}, {cmd.lon2})",
                 extra={
+                    "by_name": cmd.filters.by_name,
                     "correlation_id": cmd.correlation_id,
                     "lat1": cmd.lat1,
                     "lon1": cmd.lon1,
@@ -180,7 +187,17 @@ class StationView(ModelView, model=Station):
             lat2=form.lat2.data,
             lon2=form.lon2.data,
             correlation_id=ctx.request_id,
+            filters=SyncStationFilters(
+                by_name=self._optional_str(form.by_name.data),
+            ),
         )
+
+    def _optional_str(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        value = value.strip()
+        return value or None
 
     def _sync_stations_url(self, request: Request) -> str:
         return str(request.url_for(f"admin:view-{self.identity}-sync_stations_form"))

@@ -1,7 +1,11 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SyncStationFilters(BaseModel):
+    by_name: str | None = None
 
 
 class SyncStationCmd(BaseModel):
@@ -10,6 +14,8 @@ class SyncStationCmd(BaseModel):
 
     lat2: float
     lon2: float
+
+    filters: SyncStationFilters = Field(default_factory=SyncStationFilters)
 
 
 class StartSyncStationCmd(SyncStationCmd):
