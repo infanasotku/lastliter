@@ -17,6 +17,12 @@ logger = get_logger().getChild(__name__)
 
 
 class StationSyncForm(Form):
+    by_id = StringField(
+        "ID filter",
+        validators=[Optional()],
+        description="Optional exact station id.",
+        render_kw={"class": "form-control"},
+    )
     by_name = StringField(
         "Name filter",
         validators=[Optional()],
@@ -140,6 +146,7 @@ class StationView(ModelView, model=Station):
             logger.info(
                 f"Admin requested station sync for bounds ({cmd.lat1}, {cmd.lon1}) - ({cmd.lat2}, {cmd.lon2})",
                 extra={
+                    "by_id": cmd.filters.by_id,
                     "by_name": cmd.filters.by_name,
                     "correlation_id": cmd.correlation_id,
                     "lat1": cmd.lat1,
@@ -188,6 +195,7 @@ class StationView(ModelView, model=Station):
             lon2=form.lon2.data,
             correlation_id=ctx.request_id,
             filters=SyncStationFilters(
+                by_id=self._optional_str(form.by_id.data),
                 by_name=self._optional_str(form.by_name.data),
             ),
         )

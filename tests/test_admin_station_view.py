@@ -130,6 +130,7 @@ class TestStationViewSyncStationsForm:
                     "lon1": "82.2",
                     "lat2": "56.3",
                     "lon2": "83.4",
+                    "by_id": "  station-1  ",
                     "by_name": "  Gazprom  ",
                 }
             ),
@@ -145,7 +146,7 @@ class TestStationViewSyncStationsForm:
                 lat2=56.3,
                 lon2=83.4,
                 correlation_id="request-id",
-                filters=SyncStationFilters(by_name="Gazprom"),
+                filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
             )
         )
         request.url_for.assert_called_with("admin:list", identity="station")
@@ -187,6 +188,7 @@ class TestStationViewBuildSyncStationsCmd:
                     "lon1": "82.2",
                     "lat2": "56.3",
                     "lon2": "83.4",
+                    "by_id": "  station-1  ",
                     "by_name": "  Gazprom  ",
                 }
             )
@@ -202,7 +204,7 @@ class TestStationViewBuildSyncStationsCmd:
             lat2=56.3,
             lon2=83.4,
             correlation_id="request-id",
-            filters=SyncStationFilters(by_name="Gazprom"),
+            filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
         )
 
     def test_raises_when_form_data_is_missing(self):

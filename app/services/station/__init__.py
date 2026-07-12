@@ -80,7 +80,12 @@ class StationService:
                 return False
 
             if cmd.filters.by_name is not None:
-                return cmd.filters.by_name.lower() in s.name.lower()
+                if cmd.filters.by_name.lower() not in s.name.lower():
+                    return False
+
+            if cmd.filters.by_id is not None:
+                if cmd.filters.by_id != s.id:
+                    return False
 
             return True
 
@@ -89,6 +94,7 @@ class StationService:
             f"Fetched {len(stations)} stations, {len(filtered_stations)} passed validation",
             extra={
                 "fetched_count": len(stations),
+                "by_id": cmd.filters.by_id,
                 "by_name": cmd.filters.by_name,
                 "valid_count": len(filtered_stations),
                 "skipped_count": len(stations) - len(filtered_stations),

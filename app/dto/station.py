@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class SyncStationFilters(BaseModel):
     by_name: str | None = None
+    by_id: str | None = None
 
 
 class SyncStationCmd(BaseModel):

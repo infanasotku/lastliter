@@ -24,6 +24,7 @@ class TestSyncStationsTask:
                 "lat2": 56,
                 "lon2": 83,
                 "filters": {
+                    "by_id": "station-1",
                     "by_name": "Gazprom",
                 },
             }
@@ -34,7 +35,7 @@ class TestSyncStationsTask:
             lon1=82,
             lat2=56,
             lon2=83,
-            filters=SyncStationFilters(by_name="Gazprom"),
+            filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
         )
         runtime.run.assert_called_once_with("coroutine")
 
@@ -58,7 +59,7 @@ class TestSyncStations:
             lon1=82,
             lat2=56,
             lon2=83,
-            filters=SyncStationFilters(by_name="Gazprom"),
+            filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
         )
 
         await station.sync_stations(req, svc=svc)
@@ -69,6 +70,6 @@ class TestSyncStations:
                 lon1=82,
                 lat2=56,
                 lon2=83,
-                filters=SyncStationFilters(by_name="Gazprom"),
+                filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
             )
         )
