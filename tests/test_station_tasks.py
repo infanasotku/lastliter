@@ -1,8 +1,9 @@
 import pytest
 from mock import AsyncMock, MagicMock
 
+from app.controllers.tasks import _station as station_handlers
 from app.controllers.tasks import station
-from app.dto.station import AddStationsByAreaCmd, AddStationsByAreaFilters
+from app.dto.station import AddStationBySharedLinkCmd, AddStationsByAreaCmd, AddStationsByAreaFilters
 
 
 class TestAddStationsByAreaTask:
@@ -15,7 +16,7 @@ class TestAddStationsByAreaTask:
             return "coroutine"
 
         monkeypatch.setattr(station, "get_runtime", MagicMock(return_value=runtime))
-        monkeypatch.setattr(station, "add_stations_by_area", add_stations_by_area)
+        monkeypatch.setattr(station_handlers, "add_stations_by_area", add_stations_by_area)
 
         station.add_stations_by_area_task.run(
             {
@@ -47,6 +48,31 @@ class TestAddStationsByAreaTask:
         app.loader.import_default_modules()
 
         assert "app.controllers.tasks.station.add_stations_by_area_task" in app.tasks
+        assert "app.controllers.tasks.station.add_station_by_shared_link_task" in app.tasks
+
+
+class TestAddStationBySharedLinkTask:
+    def test_normalizes_request_payload_and_runs_async_handler(self, monkeypatch: pytest.MonkeyPatch):
+        runtime = MagicMock()
+        captured = {}
+
+        def add_station_by_shared_link(req: station.AddStationBySharedLinkRequest) -> str:
+            captured["req"] = req
+            return "coroutine"
+
+        monkeypatch.setattr(station, "get_runtime", MagicMock(return_value=runtime))
+        monkeypatch.setattr(station_handlers, "add_station_by_shared_link", add_station_by_shared_link)
+
+        station.add_station_by_shared_link_task.run(
+            {
+                "shared_link": "https://gdebenz.ru/s/token",
+            }
+        )
+
+        assert captured["req"] == station.AddStationBySharedLinkRequest(
+            shared_link="https://gdebenz.ru/s/token",
+        )
+        runtime.run.assert_called_once_with("coroutine")
 
 
 class TestAddStationsByArea:
@@ -62,7 +88,7 @@ class TestAddStationsByArea:
             filters=AddStationsByAreaFilters(by_id="station-1", by_name="Gazprom"),
         )
 
-        await station.add_stations_by_area(req, svc=svc)
+        await station_handlers.add_stations_by_area(req, svc=svc)
 
         svc.add_by_area.process.assert_awaited_once_with(
             AddStationsByAreaCmd(
@@ -72,4 +98,18 @@ class TestAddStationsByArea:
                 lon2=83,
                 filters=AddStationsByAreaFilters(by_id="station-1", by_name="Gazprom"),
             )
+        )
+
+
+class TestAddStationBySharedLink:
+    @pytest.mark.asyncio
+    async def test_calls_station_service_with_add_by_shared_link_command(self):
+        svc = MagicMock()
+        svc.add_by_shared_link.process = AsyncMock()
+        req = station.AddStationBySharedLinkRequest(shared_link="https://gdebenz.ru/s/token")
+
+        await station_handlers.add_station_by_shared_link(req, svc=svc)
+
+        svc.add_by_shared_link.process.assert_awaited_once_with(
+            AddStationBySharedLinkCmd(shared_link="https://gdebenz.ru/s/token")
         )

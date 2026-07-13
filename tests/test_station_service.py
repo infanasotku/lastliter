@@ -7,12 +7,14 @@ from pytest import fixture
 
 from app.domains.station import Station
 from app.dto.station import (
+    AddStationBySharedLinkCmd,
     AddStationsByAreaCmd,
     AddStationsByAreaFilters,
     AddStationsByAreaResult,
     GetStationStatsCmd,
     RawStationObservation,
     RunIngestionIterationCmd,
+    StartAddStationBySharedLinkCmd,
     StartAddStationsByAreaCmd,
     StationHourlyStats,
 )
@@ -243,6 +245,68 @@ class TestStationServiceStartAddStationsByArea:
                         "by_id": "station-1",
                         "by_name": "Gazprom",
                     },
+                }
+            },
+            task_id="request-id",
+        )
+
+
+class TestStationServiceAddStationBySharedLink:
+    @pytest.mark.asyncio
+    async def test_inserts_station_found_by_shared_link(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        station = make_station("station-1", name="Gazprom")
+        gdebenz.get_station_by_shared_link = AsyncMock(return_value=station)
+        station_ctx.stations.insert_many_safe.return_value = 1
+        cmd = AddStationBySharedLinkCmd(shared_link="https://gdebenz.ru/s/token")
+
+        result = await svc.add_by_shared_link.process(cmd)
+
+        assert result is True
+        gdebenz.get_station_by_shared_link.assert_awaited_once_with("https://gdebenz.ru/s/token")
+        station_ctx.stations.insert_many_safe.assert_awaited_once_with([station])
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_station_is_not_found_by_shared_link(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        gdebenz.get_station_by_shared_link = AsyncMock(return_value=None)
+        cmd = AddStationBySharedLinkCmd(shared_link="https://gdebenz.ru/s/unknown")
+
+        result = await svc.add_by_shared_link.process(cmd)
+
+        assert result is False
+        gdebenz.get_station_by_shared_link.assert_awaited_once_with("https://gdebenz.ru/s/unknown")
+        station_ctx.stations.insert_many_safe.assert_not_awaited()
+
+
+class TestStationServiceStartAddStationBySharedLink:
+    @pytest.mark.asyncio
+    async def test_schedules_add_by_shared_link_task_with_plain_request_payload(
+        self,
+        svc: StationService,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        apply_async = MagicMock()
+        monkeypatch.setattr("app.controllers.tasks.station.add_station_by_shared_link_task.apply_async", apply_async)
+        cmd = StartAddStationBySharedLinkCmd(
+            shared_link="https://gdebenz.ru/s/token",
+            correlation_id="request-id",
+        )
+
+        await svc.add_by_shared_link.start(cmd)
+
+        apply_async.assert_called_once_with(
+            kwargs={
+                "req": {
+                    "shared_link": "https://gdebenz.ru/s/token",
                 }
             },
             task_id="request-id",
