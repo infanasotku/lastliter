@@ -9,7 +9,7 @@ from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging import get_logger
 from app.infra.postgres.uows import StationReadContext, StationWriteContext
 from app.infra.redis.limit import RateLimiter
-from app.services.station.add import AddStationsByAreaUC
+from app.services.station.add import AddStationBySharedLinkUC, AddStationsByAreaUC
 
 logger = get_logger().getChild(__name__)
 
@@ -33,6 +33,13 @@ class StationService:
     @property
     def add_by_area(self) -> AddStationsByAreaUC:
         return AddStationsByAreaUC(
+            uow=self._uow,
+            gdebenz=self._gdebenz,
+        )
+
+    @property
+    def add_by_shared_link(self) -> AddStationBySharedLinkUC:
+        return AddStationBySharedLinkUC(
             uow=self._uow,
             gdebenz=self._gdebenz,
         )

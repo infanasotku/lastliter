@@ -1,6 +1,12 @@
 from app.contracts.uow import UnitOfWork
 from app.domains.station import Station
-from app.dto.station import AddStationsByAreaCmd, AddStationsByAreaResult, StartAddStationsByAreaCmd
+from app.dto.station import (
+    AddStationBySharedLinkCmd,
+    AddStationsByAreaCmd,
+    AddStationsByAreaResult,
+    StartAddStationBySharedLinkCmd,
+    StartAddStationsByAreaCmd,
+)
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging.logger import get_logger
 from app.infra.postgres.uows import StationReadContext, StationWriteContext
@@ -101,3 +107,58 @@ class AddStationsByAreaUC:
         return AddStationsByAreaResult(
             inserted_count=inserted_stations,
         )
+
+
+class AddStationBySharedLinkUC:
+    def __init__(
+        self,
+        uow: UnitOfWork[StationReadContext, StationWriteContext],
+        *,
+        gdebenz: HTTPGdeBenzClient,
+    ) -> None:
+        self._uow = uow
+        self._gdebenz = gdebenz
+
+    async def start(self, cmd: StartAddStationBySharedLinkCmd) -> None:
+        from app.controllers.tasks.station import AddStationBySharedLinkRequest, add_station_by_shared_link_task
+
+        logger.info(
+            f"Scheduling station add by shared link task for link {cmd.shared_link}",
+            extra={
+                "correlation_id": cmd.correlation_id,
+                "shared_link": cmd.shared_link,
+            },
+        )
+        req = AddStationBySharedLinkRequest(shared_link=cmd.shared_link)
+        add_station_by_shared_link_task.apply_async(kwargs={"req": req.model_dump()}, task_id=cmd.correlation_id)
+        logger.info(
+            f"Station add by shared link task scheduled with task id {cmd.correlation_id}",
+            extra={"task_id": cmd.correlation_id, "shared_link": cmd.shared_link},
+        )
+
+    async def process(self, cmd: AddStationBySharedLinkCmd) -> bool:
+        logger.info(
+            f"Starting station add by shared link for link {cmd.shared_link}",
+            extra={"shared_link": cmd.shared_link},
+        )
+        station = await self._gdebenz.get_station_by_shared_link(cmd.shared_link)
+        if station is None:
+            logger.warning(
+                f"Station not found by shared link {cmd.shared_link}",
+                extra={"shared_link": cmd.shared_link},
+            )
+            return False
+
+        async with self._uow.begin(write=True) as uow:
+            inserted_stations = await uow.stations.insert_many_safe([station])
+
+        logger.info(
+            f"Station add by shared link finished, inserted {inserted_stations} new stations",
+            extra={
+                "inserted_count": inserted_stations,
+                "station_id": station.id,
+                "station_name": station.name,
+            },
+        )
+
+        return inserted_stations > 0
