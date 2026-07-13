@@ -1,3 +1,3 @@
-from app.controllers.tasks.station import sync_stations_task
+from app.controllers.tasks.station import add_stations_by_area_task
 
-__all__ = ["sync_stations_task"]
+__all__ = ["add_stations_by_area_task"]

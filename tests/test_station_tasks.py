@@ -2,22 +2,22 @@ import pytest
 from mock import AsyncMock, MagicMock
 
 from app.controllers.tasks import station
-from app.dto.station import SyncStationCmd, SyncStationFilters
+from app.dto.station import AddStationsByAreaCmd, AddStationsByAreaFilters
 
 
-class TestSyncStationsTask:
+class TestAddStationsByAreaTask:
     def test_normalizes_request_payload_and_runs_async_handler(self, monkeypatch: pytest.MonkeyPatch):
         runtime = MagicMock()
         captured = {}
 
-        def sync_stations(req: station.SyncStationRequest) -> str:
+        def add_stations_by_area(req: station.AddStationsByAreaRequest) -> str:
             captured["req"] = req
             return "coroutine"
 
         monkeypatch.setattr(station, "get_runtime", MagicMock(return_value=runtime))
-        monkeypatch.setattr(station, "sync_stations", sync_stations)
+        monkeypatch.setattr(station, "add_stations_by_area", add_stations_by_area)
 
-        station.sync_stations_task.run(
+        station.add_stations_by_area_task.run(
             {
                 "lat1": 55,
                 "lon1": 82,
@@ -30,12 +30,12 @@ class TestSyncStationsTask:
             }
         )
 
-        assert captured["req"] == station.SyncStationRequest(
+        assert captured["req"] == station.AddStationsByAreaRequest(
             lat1=55,
             lon1=82,
             lat2=56,
             lon2=83,
-            filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
+            filters=AddStationsByAreaFilters(by_id="station-1", by_name="Gazprom"),
         )
         runtime.run.assert_called_once_with("coroutine")
 
@@ -46,30 +46,30 @@ class TestSyncStationsTask:
 
         app.loader.import_default_modules()
 
-        assert "app.controllers.tasks.station.sync_stations_task" in app.tasks
+        assert "app.controllers.tasks.station.add_stations_by_area_task" in app.tasks
 
 
-class TestSyncStations:
+class TestAddStationsByArea:
     @pytest.mark.asyncio
-    async def test_calls_station_service_with_sync_command(self):
+    async def test_calls_station_service_with_add_by_area_command(self):
         svc = MagicMock()
-        svc.sync_stations = AsyncMock()
-        req = station.SyncStationRequest(
+        svc.add_by_area.process = AsyncMock()
+        req = station.AddStationsByAreaRequest(
             lat1=55,
             lon1=82,
             lat2=56,
             lon2=83,
-            filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
+            filters=AddStationsByAreaFilters(by_id="station-1", by_name="Gazprom"),
         )
 
-        await station.sync_stations(req, svc=svc)
+        await station.add_stations_by_area(req, svc=svc)
 
-        svc.sync_stations.assert_awaited_once_with(
-            SyncStationCmd(
+        svc.add_by_area.process.assert_awaited_once_with(
+            AddStationsByAreaCmd(
                 lat1=55,
                 lon1=82,
                 lat2=56,
                 lon2=83,
-                filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
+                filters=AddStationsByAreaFilters(by_id="station-1", by_name="Gazprom"),
             )
         )

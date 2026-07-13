@@ -7,7 +7,7 @@ from wtforms.validators import InputRequired, NumberRange, Optional
 
 from app.container import Container
 from app.domains.station import StationScore
-from app.dto.station import GetStationStatsCmd, StartSyncStationCmd, SyncStationFilters
+from app.dto.station import AddStationsByAreaFilters, GetStationStatsCmd, StartAddStationsByAreaCmd
 from app.infra.common.correlation import get_request_context
 from app.infra.logging import get_logger
 from app.infra.postgres.models.station import Station
@@ -16,7 +16,7 @@ from app.services.station import StationService
 logger = get_logger().getChild(__name__)
 
 
-class StationSyncForm(Form):
+class AddStationsByAreaForm(Form):
     by_id = StringField(
         "ID filter",
         validators=[Optional()],
@@ -130,21 +130,21 @@ class StationView(ModelView, model=Station):
         return await svc.get_station_stats(cmd)
 
     @action(
-        "sync-stations-form",
-        label="Sync stations",
+        "add-stations-by-area-form",
+        label="Add by area",
         add_in_detail=False,
     )
-    async def sync_stations_form_action(self, request: Request) -> Response:
-        return RedirectResponse(self._sync_stations_url(request), status_code=303)
+    async def add_stations_by_area_form_action(self, request: Request) -> Response:
+        return RedirectResponse(self._add_stations_by_area_url(request), status_code=303)
 
-    @expose("/sync", methods=["GET", "POST"])
-    async def sync_stations_form(self, request: Request) -> Response:
-        form = StationSyncForm(await request.form()) if request.method == "POST" else StationSyncForm()
+    @expose("/add-by-area", methods=["GET", "POST"])
+    async def add_stations_by_area_form(self, request: Request) -> Response:
+        form = AddStationsByAreaForm(await request.form()) if request.method == "POST" else AddStationsByAreaForm()
 
         if request.method == "POST" and form.validate():
-            cmd = self._build_sync_stations_cmd(form)
+            cmd = self._build_add_stations_by_area_cmd(form)
             logger.info(
-                f"Admin requested station sync for bounds ({cmd.lat1}, {cmd.lon1}) - ({cmd.lat2}, {cmd.lon2})",
+                f"Admin requested station add by area for bounds ({cmd.lat1}, {cmd.lon1}) - ({cmd.lat2}, {cmd.lon2})",
                 extra={
                     "by_id": cmd.filters.by_id,
                     "by_name": cmd.filters.by_name,
@@ -155,46 +155,46 @@ class StationView(ModelView, model=Station):
                     "lon2": cmd.lon2,
                 },
             )
-            await self.sync_stations(cmd)
+            await self.start_add_stations_by_area(cmd)
             return RedirectResponse(self._stations_list_url(request), status_code=303)
 
         if request.method == "POST":
-            logger.warning(f"Admin station sync form validation failed: {form.errors}")
+            logger.warning(f"Admin station add by area form validation failed: {form.errors}")
 
         return await self.templates.TemplateResponse(
             request,
-            "station_sync.html",
+            "station_add_by_area.html",
             {
                 "form": form,
-                "form_action_url": self._sync_stations_url(request),
+                "form_action_url": self._add_stations_by_area_url(request),
                 "list_url": self._stations_list_url(request),
                 "model_view": self,
                 "subtitle": self.name_plural,
-                "title": "Sync stations",
+                "title": "Add stations by area",
             },
         )
 
     @inject
-    async def sync_stations(
+    async def start_add_stations_by_area(
         self,
-        cmd: StartSyncStationCmd,
+        cmd: StartAddStationsByAreaCmd,
         #
         svc: StationService = Provide[Container.station_service],
     ) -> None:
-        await svc.start_sync_stations(cmd)
+        await svc.add_by_area.start(cmd)
 
-    def _build_sync_stations_cmd(self, form: StationSyncForm) -> StartSyncStationCmd:
+    def _build_add_stations_by_area_cmd(self, form: AddStationsByAreaForm) -> StartAddStationsByAreaCmd:
         if form.lat1.data is None or form.lon1.data is None or form.lat2.data is None or form.lon2.data is None:
-            raise ValueError("Station sync form is missing required coordinates")
+            raise ValueError("Station add by area form is missing required coordinates")
 
         ctx = get_request_context()
-        return StartSyncStationCmd(
+        return StartAddStationsByAreaCmd(
             lat1=form.lat1.data,
             lon1=form.lon1.data,
             lat2=form.lat2.data,
             lon2=form.lon2.data,
             correlation_id=ctx.request_id,
-            filters=SyncStationFilters(
+            filters=AddStationsByAreaFilters(
                 by_id=self._optional_str(form.by_id.data),
                 by_name=self._optional_str(form.by_name.data),
             ),
@@ -207,8 +207,8 @@ class StationView(ModelView, model=Station):
         value = value.strip()
         return value or None
 
-    def _sync_stations_url(self, request: Request) -> str:
-        return str(request.url_for(f"admin:view-{self.identity}-sync_stations_form"))
+    def _add_stations_by_area_url(self, request: Request) -> str:
+        return str(request.url_for(f"admin:view-{self.identity}-add_stations_by_area_form"))
 
     def _stations_list_url(self, request: Request) -> str:
         return str(request.url_for("admin:list", identity=self.identity))

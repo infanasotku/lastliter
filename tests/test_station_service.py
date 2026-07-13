@@ -7,14 +7,14 @@ from pytest import fixture
 
 from app.domains.station import Station
 from app.dto.station import (
+    AddStationsByAreaCmd,
+    AddStationsByAreaFilters,
+    AddStationsByAreaResult,
     GetStationStatsCmd,
     RawStationObservation,
     RunIngestionIterationCmd,
-    StartSyncStationCmd,
+    StartAddStationsByAreaCmd,
     StationHourlyStats,
-    SyncStationCmd,
-    SyncStationFilters,
-    SyncStationResult,
 )
 from app.services.station import StationService
 
@@ -90,7 +90,7 @@ def make_station(
     )
 
 
-class TestStationServiceSyncStations:
+class TestStationServiceAddStationsByArea:
     @pytest.mark.asyncio
     async def test_fetches_stations_filters_invalid_rows_and_inserts_valid_ones(
         self,
@@ -109,16 +109,16 @@ class TestStationServiceSyncStations:
             empty_address_station,
             another_valid_station,
         ]
-        cmd = SyncStationCmd(
+        cmd = AddStationsByAreaCmd(
             lat1=55,
             lon1=82,
             lat2=56,
             lon2=83,
         )
 
-        result = await svc.sync_stations(cmd)
+        result = await svc.add_by_area.process(cmd)
 
-        assert result == SyncStationResult(new=2)
+        assert result == AddStationsByAreaResult(inserted_count=2)
         gdebenz.get_stations.assert_awaited_once_with(
             lat1=55,
             lon1=82,
@@ -147,17 +147,17 @@ class TestStationServiceSyncStations:
             matching_station,
             other_station,
         ]
-        cmd = SyncStationCmd(
+        cmd = AddStationsByAreaCmd(
             lat1=55,
             lon1=82,
             lat2=56,
             lon2=83,
-            filters=SyncStationFilters(by_name="gaz"),
+            filters=AddStationsByAreaFilters(by_name="gaz"),
         )
 
-        result = await svc.sync_stations(cmd)
+        result = await svc.add_by_area.process(cmd)
 
-        assert result == SyncStationResult(new=1)
+        assert result == AddStationsByAreaResult(inserted_count=1)
         station_ctx.stations.insert_many_safe.assert_awaited_once_with([matching_station])
 
     @pytest.mark.asyncio
@@ -174,17 +174,17 @@ class TestStationServiceSyncStations:
             matching_station,
             other_station,
         ]
-        cmd = SyncStationCmd(
+        cmd = AddStationsByAreaCmd(
             lat1=55,
             lon1=82,
             lat2=56,
             lon2=83,
-            filters=SyncStationFilters(by_id="station-1"),
+            filters=AddStationsByAreaFilters(by_id="station-1"),
         )
 
-        result = await svc.sync_stations(cmd)
+        result = await svc.add_by_area.process(cmd)
 
-        assert result == SyncStationResult(new=1)
+        assert result == AddStationsByAreaResult(inserted_count=1)
         station_ctx.stations.insert_many_safe.assert_awaited_once_with([matching_station])
 
     @pytest.mark.asyncio
@@ -199,38 +199,38 @@ class TestStationServiceSyncStations:
             make_station("station-1", name=""),
             make_station("station-2", address=""),
         ]
-        cmd = SyncStationCmd(
+        cmd = AddStationsByAreaCmd(
             lat1=55,
             lon1=82,
             lat2=56,
             lon2=83,
         )
 
-        result = await svc.sync_stations(cmd)
+        result = await svc.add_by_area.process(cmd)
 
-        assert result == SyncStationResult(new=0)
+        assert result == AddStationsByAreaResult(inserted_count=0)
         station_ctx.stations.insert_many_safe.assert_awaited_once_with([])
 
 
-class TestStationServiceStartSyncStations:
+class TestStationServiceStartAddStationsByArea:
     @pytest.mark.asyncio
-    async def test_schedules_sync_task_with_plain_request_payload(
+    async def test_schedules_add_by_area_task_with_plain_request_payload(
         self,
         svc: StationService,
         monkeypatch: pytest.MonkeyPatch,
     ):
         apply_async = MagicMock()
-        monkeypatch.setattr("app.controllers.tasks.station.sync_stations_task.apply_async", apply_async)
-        cmd = StartSyncStationCmd(
+        monkeypatch.setattr("app.controllers.tasks.station.add_stations_by_area_task.apply_async", apply_async)
+        cmd = StartAddStationsByAreaCmd(
             lat1=55,
             lon1=82,
             lat2=56,
             lon2=83,
             correlation_id="request-id",
-            filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
+            filters=AddStationsByAreaFilters(by_id="station-1", by_name="Gazprom"),
         )
 
-        await svc.start_sync_stations(cmd)
+        await svc.add_by_area.start(cmd)
 
         apply_async.assert_called_once_with(
             kwargs={

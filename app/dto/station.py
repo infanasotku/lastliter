@@ -4,27 +4,35 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class SyncStationFilters(BaseModel):
+class AddStationsByAreaFilters(BaseModel):
     by_name: str | None = None
     by_id: str | None = None
 
 
-class SyncStationCmd(BaseModel):
+class AddStationsByAreaCmd(BaseModel):
     lat1: float
     lon1: float
 
     lat2: float
     lon2: float
 
-    filters: SyncStationFilters = Field(default_factory=SyncStationFilters)
+    filters: AddStationsByAreaFilters = Field(default_factory=AddStationsByAreaFilters)
 
 
-class StartSyncStationCmd(SyncStationCmd):
+class StartAddStationsByAreaCmd(AddStationsByAreaCmd):
     correlation_id: str
 
 
-class SyncStationResult(BaseModel):
-    new: int
+class AddStationsByAreaResult(BaseModel):
+    inserted_count: int
+
+
+class AddStationBySharedLinkCmd(BaseModel):
+    shared_link: str
+
+
+class StartAddStationBySharedLinkCmd(AddStationBySharedLinkCmd):
+    correlation_id: str
 
 
 class RawStationObservation(BaseModel):

@@ -6,9 +6,9 @@ from mock import AsyncMock, MagicMock
 from starlette.datastructures import URL as StarletteURL
 from starlette.datastructures import FormData
 
-from app.controllers.admin.views.station import StationSyncForm, StationView
+from app.controllers.admin.views.station import AddStationsByAreaForm, StationView
 from app.domains.station import StationScore
-from app.dto.station import GetStationStatsCmd, StartSyncStationCmd, SyncStationFilters
+from app.dto.station import AddStationsByAreaFilters, GetStationStatsCmd, StartAddStationsByAreaCmd
 from app.infra.common.correlation import RequestContext, with_request_context
 
 
@@ -27,7 +27,7 @@ def make_request(
     request.url_for = MagicMock(
         side_effect=lambda name, **_: StarletteURL(
             {
-                "admin:view-station-sync_stations_form": "http://testserver/station/sync",
+                "admin:view-station-add_stations_by_area_form": "http://testserver/station/add-by-area",
                 "admin:view-station-station_stats": "http://testserver/station/stats/station-1",
                 "admin:list": "http://testserver/station/list",
             }[name]
@@ -47,17 +47,17 @@ def awaited_args(mock: AsyncMock) -> tuple[Any, ...]:
     return mock.await_args.args
 
 
-class TestStationViewSyncStationsFormAction:
+class TestStationViewAddStationsByAreaFormAction:
     @pytest.mark.asyncio
-    async def test_redirects_to_sync_form(self):
+    async def test_redirects_to_add_by_area_form(self):
         view = StationView()
         request = make_request()
 
-        response = await view.sync_stations_form_action(request)
+        response = await view.add_stations_by_area_form_action(request)
 
-        request.url_for.assert_called_once_with("admin:view-station-sync_stations_form")
+        request.url_for.assert_called_once_with("admin:view-station-add_stations_by_area_form")
         assert response.status_code == 303
-        assert response.headers["location"] == "http://testserver/station/sync"
+        assert response.headers["location"] == "http://testserver/station/add-by-area"
 
 
 class TestStationViewStationStats:
@@ -99,7 +99,7 @@ class TestStationViewStationStats:
         assert context["list_url"] == "http://testserver/station/list"
 
 
-class TestStationViewSyncStationsForm:
+class TestStationViewAddStationsByAreaForm:
     @pytest.mark.asyncio
     async def test_renders_form_on_get(self):
         view = StationView()
@@ -107,21 +107,21 @@ class TestStationViewSyncStationsForm:
         template_response_mock = mock_templates(view, template_response)
         request = make_request()
 
-        response = await view.sync_stations_form(request)
+        response = await view.add_stations_by_area_form(request)
 
         assert response is template_response
         template_response_mock.assert_awaited_once()
         _, template_name, context = awaited_args(template_response_mock)
-        assert template_name == "station_sync.html"
-        assert isinstance(context["form"], StationSyncForm)
-        assert context["form_action_url"] == "http://testserver/station/sync"
+        assert template_name == "station_add_by_area.html"
+        assert isinstance(context["form"], AddStationsByAreaForm)
+        assert context["form_action_url"] == "http://testserver/station/add-by-area"
         assert context["list_url"] == "http://testserver/station/list"
         assert context["model_view"] is view
 
     @pytest.mark.asyncio
-    async def test_builds_cmd_calls_sync_and_redirects_to_list_on_valid_post(self):
+    async def test_builds_cmd_starts_add_by_area_and_redirects_to_list_on_valid_post(self):
         view = StationView()
-        view.sync_stations = AsyncMock()
+        view.start_add_stations_by_area = AsyncMock()
         request = make_request(
             method="POST",
             form=FormData(
@@ -137,16 +137,16 @@ class TestStationViewSyncStationsForm:
         )
 
         with with_request_context(RequestContext(request_id="request-id")):
-            response = await view.sync_stations_form(request)
+            response = await view.add_stations_by_area_form(request)
 
-        view.sync_stations.assert_awaited_once_with(
-            StartSyncStationCmd(
+        view.start_add_stations_by_area.assert_awaited_once_with(
+            StartAddStationsByAreaCmd(
                 lat1=55.1,
                 lon1=82.2,
                 lat2=56.3,
                 lon2=83.4,
                 correlation_id="request-id",
-                filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
+                filters=AddStationsByAreaFilters(by_id="station-1", by_name="Gazprom"),
             )
         )
         request.url_for.assert_called_with("admin:list", identity="station")
@@ -154,9 +154,9 @@ class TestStationViewSyncStationsForm:
         assert response.headers["location"] == "http://testserver/station/list"
 
     @pytest.mark.asyncio
-    async def test_renders_form_and_does_not_sync_on_invalid_post(self):
+    async def test_renders_form_and_does_not_start_add_by_area_on_invalid_post(self):
         view = StationView()
-        view.sync_stations = AsyncMock()
+        view.start_add_stations_by_area = AsyncMock()
         template_response = MagicMock()
         template_response_mock = mock_templates(view, template_response)
         request = make_request(
@@ -171,17 +171,17 @@ class TestStationViewSyncStationsForm:
             ),
         )
 
-        response = await view.sync_stations_form(request)
+        response = await view.add_stations_by_area_form(request)
 
         assert response is template_response
-        view.sync_stations.assert_not_awaited()
+        view.start_add_stations_by_area.assert_not_awaited()
         _, _, context = awaited_args(template_response_mock)
         assert "lat1" in context["form"].errors
 
 
-class TestStationViewBuildSyncStationsCmd:
+class TestStationViewBuildAddStationsByAreaCmd:
     def test_builds_cmd_from_valid_form(self):
-        form = StationSyncForm(
+        form = AddStationsByAreaForm(
             FormData(
                 {
                     "lat1": "55.1",
@@ -196,19 +196,19 @@ class TestStationViewBuildSyncStationsCmd:
         assert form.validate()
 
         with with_request_context(RequestContext(request_id="request-id")):
-            cmd = StationView()._build_sync_stations_cmd(form)
+            cmd = StationView()._build_add_stations_by_area_cmd(form)
 
-        assert cmd == StartSyncStationCmd(
+        assert cmd == StartAddStationsByAreaCmd(
             lat1=55.1,
             lon1=82.2,
             lat2=56.3,
             lon2=83.4,
             correlation_id="request-id",
-            filters=SyncStationFilters(by_id="station-1", by_name="Gazprom"),
+            filters=AddStationsByAreaFilters(by_id="station-1", by_name="Gazprom"),
         )
 
     def test_raises_when_form_data_is_missing(self):
-        form = StationSyncForm()
+        form = AddStationsByAreaForm()
 
         with pytest.raises(ValueError, match="missing required coordinates"):
-            StationView()._build_sync_stations_cmd(form)
+            StationView()._build_add_stations_by_area_cmd(form)
