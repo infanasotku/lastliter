@@ -1,6 +1,5 @@
 ```sh
-curl 'https://gdebenz.ru/api/comments/474954443' \
-  -H 'x-rt: f96123f0f2a056fe1169e8fc'
+curl 'https://gdebenz.ru/api/comments/474954443'
 ```
 
 ```json
