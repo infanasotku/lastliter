@@ -18,9 +18,9 @@ EVENTS_PATH = "/comments/{id}/recent?limit={limit}&fp={fingerprint}"
 SHARE_PATH = "/s/{token}"
 NEARBY_RADIUS_KM = 20
 SHARE_STATION_RE = re.compile(r"window\.SHARE_STATION\s*=\s*{")
-OSM_ID_RE = re.compile(r"""osm_id:\s*['"](?P<value>[^'"]+)['"]""")
-LAT_RE = re.compile(r"lat:\s*(?P<value>-?\d+(?:\.\d+)?)")
-LON_RE = re.compile(r"lon:\s*(?P<value>-?\d+(?:\.\d+)?)")
+OSM_ID_RE = re.compile(r""""?osm_id"?\s*:\s*['"](?P<value>[^'"]+)['"]""")
+LAT_RE = re.compile(r""""?lat"?\s*:\s*(?P<value>-?\d+(?:\.\d+)?)""")
+LON_RE = re.compile(r""""?lon"?\s*:\s*(?P<value>-?\d+(?:\.\d+)?)""")
 
 
 class HTTPGdeBenzClient:
@@ -125,6 +125,7 @@ class HTTPGdeBenzClient:
                 "lon": float(share_data["lon"]),
                 "radius_km": NEARBY_RADIUS_KM,
             },
+            follow_redirects=True,
         )
         r.raise_for_status()
 
