@@ -4,7 +4,7 @@ import pytest
 from mock import AsyncMock, MagicMock
 
 from app.controllers.loop import station
-from app.dto.station import RunIngestionIterationCmd
+from app.dto.ingestion import RunIngestionIterationCmd
 
 
 class TestRunIngestionLoop:
@@ -14,14 +14,19 @@ class TestRunIngestionLoop:
         svc.run_ingestion_iteration = AsyncMock(return_value=False)
         sleep = AsyncMock(side_effect=asyncio.CancelledError)
         monkeypatch.setattr(station.asyncio, "sleep", sleep)
+        loop = station.IngestionLoop()
 
         with pytest.raises(asyncio.CancelledError):
-            await station.run_ingestion_loop(svc=svc)
+            await loop._run_loop(
+                RunIngestionIterationCmd(owner=loop._loop_id, stage="fetch_raw"),
+                svc=svc,
+            )
 
         svc.run_ingestion_iteration.assert_awaited_once()
         cmd = svc.run_ingestion_iteration.await_args.args[0]
         assert isinstance(cmd, RunIngestionIterationCmd)
         assert cmd.owner
+        assert cmd.stage == "fetch_raw"
         sleep.assert_awaited_once_with(station.IDLE_SLEEP_SECONDS)
 
     @pytest.mark.asyncio
@@ -30,11 +35,16 @@ class TestRunIngestionLoop:
         svc.run_ingestion_iteration = AsyncMock(side_effect=[True, False])
         sleep = AsyncMock(side_effect=asyncio.CancelledError)
         monkeypatch.setattr(station.asyncio, "sleep", sleep)
+        loop = station.IngestionLoop()
 
         with pytest.raises(asyncio.CancelledError):
-            await station.run_ingestion_loop(svc=svc)
+            await loop._run_loop(
+                RunIngestionIterationCmd(owner=loop._loop_id, stage="fetch_raw"),
+                svc=svc,
+            )
 
         assert svc.run_ingestion_iteration.await_count == 2
         first_cmd, second_cmd = [call.args[0] for call in svc.run_ingestion_iteration.await_args_list]
         assert first_cmd.owner == second_cmd.owner
+        assert first_cmd.stage == second_cmd.stage == "fetch_raw"
         sleep.assert_awaited_once_with(station.IDLE_SLEEP_SECONDS)

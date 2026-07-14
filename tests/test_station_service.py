@@ -2,19 +2,18 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from mock import ANY, AsyncMock, MagicMock, call
+from mock import ANY, AsyncMock, MagicMock
 from pytest import fixture
 
 from app.domains.exception import StationNotFoundError
 from app.domains.station import Station
+from app.dto.ingestion import RawStationObservation, RunIngestionIterationCmd
 from app.dto.station import (
     AddStationBySharedLinkCmd,
     AddStationsByAreaCmd,
     AddStationsByAreaFilters,
     AddStationsByAreaResult,
     GetStationStatsCmd,
-    RawStationObservation,
-    RunIngestionIterationCmd,
     StartAddStationBySharedLinkCmd,
     StartAddStationsByAreaCmd,
     StationHourlyStats,
@@ -91,6 +90,10 @@ def make_station(
         next_fetch_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         fetch_interval_sec=300,
     )
+
+
+def make_ingestion_cmd(owner: str = "worker-1") -> RunIngestionIterationCmd:
+    return RunIngestionIterationCmd(owner=owner, stage="fetch_raw")
 
 
 class TestStationServiceAddStationsByArea:
@@ -424,7 +427,7 @@ class TestStationServiceRunIngestionIteration:
         station_ctx.stations.claim_stations = AsyncMock(return_value=[])
         station_ctx.stations.update_claimed_stations = AsyncMock()
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is False
         station_ctx.stations.claim_stations.assert_awaited_once_with(
@@ -451,7 +454,7 @@ class TestStationServiceRunIngestionIteration:
         station_ctx.stations.update_claimed_stations = AsyncMock(return_value=1)
         gdebenz.get_obs_by_id = AsyncMock(return_value=[])
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is True
         station_ctx.stations.claim_stations.assert_awaited_once_with(
@@ -483,17 +486,14 @@ class TestStationServiceRunIngestionIteration:
 
         gdebenz.get_obs_by_id = AsyncMock(side_effect=get_obs_by_id)
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is True
         assert failed_station.fetch_error == "upstream unavailable"
         assert successful_station.fetch_error is None
         click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
-        station_ctx.stations.update_claimed_stations.assert_has_awaits(
-            [
-                call([failed_station], owner="worker-1", now=ANY),
-                call([successful_station], owner="worker-1", now=ANY),
-            ]
+        station_ctx.stations.update_claimed_stations.assert_awaited_once_with(
+            [failed_station, successful_station], owner="worker-1", now=ANY
         )
 
     @pytest.mark.asyncio
@@ -523,7 +523,7 @@ class TestStationServiceRunIngestionIteration:
 
         click_ctx.stations.insert_raw_observations = AsyncMock(side_effect=insert_raw_observations)
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is True
         assert first_station.fetch_error is None
@@ -546,7 +546,7 @@ class TestStationServiceRunIngestionIteration:
         station_ctx.stations.update_claimed_stations = AsyncMock(return_value=2)
         gdebenz.get_obs_by_id = AsyncMock(side_effect=RuntimeError("upstream unavailable"))
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is False
         assert [station.fetch_error for station in stations] == ["upstream unavailable", "upstream unavailable"]
@@ -574,7 +574,7 @@ class TestStationServiceRunIngestionIteration:
         station_ctx.stations.update_claimed_stations = AsyncMock(return_value=1)
         gdebenz.get_obs_by_id = AsyncMock(return_value=[raw])
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is True
         limiter.wait.assert_awaited_once_with(key="lastliter:stations:fetch:limit", limit_per_second=2)
@@ -608,11 +608,11 @@ class TestStationServiceRunIngestionIteration:
 
         limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is False
         click_ctx.stations.insert_raw_observations.assert_not_awaited()
-        station_ctx.stations.update_claimed_stations.assert_not_awaited()
+        station_ctx.stations.update_claimed_stations.assert_awaited_once_with([station], owner="worker-1", now=ANY)
 
     @pytest.mark.asyncio
     async def test_inserts_only_stations_with_refreshed_lease_after_partial_lease_loss(
@@ -643,7 +643,7 @@ class TestStationServiceRunIngestionIteration:
 
         limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is True
         inserted = click_ctx.stations.insert_raw_observations.await_args.args[0]
@@ -672,8 +672,8 @@ class TestStationServiceRunIngestionIteration:
 
         limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
 
-        has_work = await svc.run_ingestion_iteration(RunIngestionIterationCmd(owner="worker-1"))
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is False
         click_ctx.stations.insert_raw_observations.assert_not_awaited()
-        station_ctx.stations.update_claimed_stations.assert_not_awaited()
+        station_ctx.stations.update_claimed_stations.assert_awaited_once_with([station], owner="worker-1", now=ANY)

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 from mock import AsyncMock, MagicMock
 
-from app.dto.station import InsertObservation
+from app.dto.ingestion import InsertObservation
 from app.infra.clickhouse.repositories.station import ClickStationRepository
 
 

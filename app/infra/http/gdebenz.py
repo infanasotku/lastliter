@@ -6,7 +6,7 @@ from datetime import datetime
 import httpx
 
 from app.domains.station import Station
-from app.dto.station import RawStationObservation
+from app.dto.ingestion import RawStationObservation
 from app.infra.common.time import now_utc
 from app.infra.config.gdebenz import GdebenzSettings
 

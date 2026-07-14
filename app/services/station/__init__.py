@@ -1,10 +1,8 @@
 from app.contracts.uow import UnitOfWork
 from app.domains.exception import StationNotFoundError
 from app.domains.stats import StationScore
-from app.dto.station import (
-    GetStationStatsCmd,
-    RunIngestionIterationCmd,
-)
+from app.dto.ingestion import RunIngestionIterationCmd
+from app.dto.station import GetStationStatsCmd
 from app.infra.clickhouse.repositories import StationContext
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging import get_logger
@@ -51,11 +49,12 @@ class StationService:
         from app.services.station.ingestion import RunIngestionIterationUC
 
         return await RunIngestionIterationUC(
+            cmd,
             uow=self._uow,
             click_ctx=self._click_ctx,
             gdebenz=self._gdebenz,
             limiter=self._limiter,
-        ).run(cmd)
+        ).run()
 
     async def get_station_stats(self, cmd: GetStationStatsCmd) -> list[StationScore]:
         from app.services.station.stats import GetStationStatsUC

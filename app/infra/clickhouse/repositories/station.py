@@ -1,4 +1,5 @@
-from app.dto.station import InsertObservation, StationHourlyStats
+from app.dto.ingestion import InsertObservation
+from app.dto.station import StationHourlyStats
 from app.infra.clickhouse.repositories.base import ClickHouseRepository
 
 _OBS_TABLE = "station_observations_raw"

@@ -1,6 +1,3 @@
-from datetime import datetime
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -33,29 +30,6 @@ class AddStationBySharedLinkCmd(BaseModel):
 
 class StartAddStationBySharedLinkCmd(AddStationBySharedLinkCmd):
     correlation_id: str
-
-
-class RawStationObservation(BaseModel):
-    status: Literal["queue", "yes", "no", "low"]
-    detail: str
-    created_at: datetime
-    author_reliable: bool
-    on_site: bool
-
-
-class InsertObservation(RawStationObservation):
-    id: int
-    station_id: str
-
-
-class RunIngestionIterationCmd(BaseModel):
-    owner: str
-
-
-class FetchRawStationObservations(BaseModel):
-    station_id: str
-    observations: list[RawStationObservation]
-    error: str | None = None
 
 
 class StationHourlyStats(BaseModel):

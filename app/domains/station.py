@@ -36,14 +36,14 @@ class Station:
     fetch_error: str | None = None
     priority: int = 0
 
-    def update_fetch_info(self, *, now: datetime, observations_fetched: int) -> None:
+    def update_process_info(self, *, now: datetime, observations_fetched: int) -> None:
         self.last_fetched_at = now
         self.next_fetch_at = now + timedelta(seconds=self.fetch_interval_sec)
         self.fetch_error = None
 
         # TODO: implement a more sophisticated algorithm for adjusting fetch_interval_sec and priority based on observations
 
-    def mark_fetch_error(self, *, now: datetime, error: str) -> None:
+    def mark_process_error(self, *, now: datetime, error: str) -> None:
         self.last_fetched_at = now
         self.next_fetch_at = now + timedelta(seconds=FETCH_INTERVAL_AFTER_ERROR_SEC)
         self.fetch_error = error

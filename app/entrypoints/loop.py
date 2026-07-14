@@ -1,12 +1,9 @@
-import asyncio
-import contextlib
-import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from app.container import Container
-from app.controllers.loop.station import run_ingestion_loop
+from app.controllers.loop.station import IngestionLoop
 from app.infra.logging.logger import get_logger
 
 logger = get_logger().getChild(__name__)
@@ -18,6 +15,8 @@ def create_app() -> FastAPI:
     container = Container()
     container.wire(modules=["app.controllers.loop.station"])
 
+    loop = IngestionLoop()
+
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         async def _await(call):
@@ -27,23 +26,10 @@ def create_app() -> FastAPI:
 
         await _await(container.init_resources)  # type: ignore
 
-        async def _do():
-            try:
-                await run_ingestion_loop()
-            except Exception:
-                logger.exception("Error in ingestion loop")
-                sys.exit(1)
-
-        t = asyncio.create_task(_do())
         try:
-            yield
+            async with loop.run():
+                yield
         finally:
-            logger.info("Cancelling ingestion loop")
-            t.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await t
-            logger.info("Ingestion loop cancelled")
-
             logger.info("Disposing resources")
             await _await(container.shutdown_resources)  # type: ignore
             await container.read_engine().dispose()
