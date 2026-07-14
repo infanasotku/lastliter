@@ -28,7 +28,10 @@ def _to_domain(model: StationModel) -> Station:
 
 
 class PgStationRepository(PostgresRepository):
-    pass
+    async def get_by_id(self, id: str) -> Station | None:
+        stmt = select(StationModel).where(StationModel.id == id)
+        station = await self._session.scalar(stmt)
+        return _to_domain(station) if station else None
 
 
 class GuardedMixin(PostgresRepository):
