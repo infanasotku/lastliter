@@ -10,12 +10,15 @@ from app.dto.station import RawStationObservation
 from app.infra.common.time import now_utc
 from app.infra.config.gdebenz import GdebenzSettings
 
-BASE_URL = "https://www.gdebenz.ru/api"
-SITE_URL = "https://www.gdebenz.ru"
-STATIONS_PATH = "/stations"
-NEARBY_PATH = "/nearby"
-EVENTS_PATH = "/comments/{id}/recent?limit={limit}&fp={fingerprint}"
+BASE_URL = "https://www.gdebenz.ru"
+STATIONS_PATH = "/api/stations"
+NEARBY_PATH = "/api/nearby"
+EVENTS_PATH = "/api/comments/{id}/recent?limit={limit}&fp={fingerprint}"
+
+SITE_URL = "https://gdebenz.ru"
+GET_TOKEN_PATH = "/api/share-snapshot"
 SHARE_PATH = "/s/{token}"
+
 NEARBY_RADIUS_KM = 20
 SHARE_STATION_RE = re.compile(r"window\.SHARE_STATION\s*=\s*{")
 OSM_ID_RE = re.compile(r""""?osm_id"?\s*:\s*['"](?P<value>[^'"]+)['"]""")
@@ -89,7 +92,7 @@ class HTTPGdeBenzClient:
         if not token:
             raise ValueError(f"Could not extract token from shared link: {shared_link}")
 
-        url = f"{SITE_URL}{SHARE_PATH.format(token=token)}"
+        url = f"{BASE_URL}{SHARE_PATH.format(token=token)}"
         share_station_started = False
         share_data: dict[str, str] = {}
         patterns = {
@@ -135,6 +138,16 @@ class HTTPGdeBenzClient:
             raise ValueError(f"Could not find station {osm_id} within {NEARBY_RADIUS_KM} km")
 
         return self._to_station(row)
+
+    async def get_shared_link_by_station_id(self, station_id: str) -> str:
+        url = f"{BASE_URL}{GET_TOKEN_PATH}"
+        r = await self._client.post(url, json={"osm_id": station_id})
+        r.raise_for_status()
+
+        data = r.json()
+        token = data["token"]
+
+        return f"{SITE_URL}{SHARE_PATH.format(token=token)}"
 
 
 @asynccontextmanager

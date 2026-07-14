@@ -1,5 +1,6 @@
 from app.controllers.admin.views.mixins.add_by_area import AddStationsByAreaForm, AddStationsByAreaMixin
 from app.controllers.admin.views.mixins.add_by_link import AddStationBySharedLinkForm, AddStationBySharedLinkMixin
+from app.controllers.admin.views.mixins.gdebenz import GdebenzLinkMixin
 from app.controllers.admin.views.mixins.stats import StationStatsMixin
 
 __all__ = [
@@ -7,5 +8,6 @@ __all__ = [
     "AddStationBySharedLinkMixin",
     "AddStationsByAreaForm",
     "AddStationsByAreaMixin",
+    "GdebenzLinkMixin",
     "StationStatsMixin",
 ]

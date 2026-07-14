@@ -1,4 +1,5 @@
 from app.contracts.uow import UnitOfWork
+from app.domains.exception import StationNotFoundError
 from app.domains.station import StationScore
 from app.dto.station import (
     GetStationStatsCmd,
@@ -62,3 +63,13 @@ class StationService:
         return await GetStationStatsUC(
             click_ctx=self._click_ctx,
         ).run(cmd)
+
+    # Common
+
+    async def get_link_by_station_id(self, station_id: str) -> str:
+        async with self._uow.begin(write=False) as ctx:
+            s = await ctx.stations.get_by_id(station_id)
+            if s is None:
+                raise StationNotFoundError(f"Station with id {station_id} not found")
+
+        return await self._gdebenz.get_shared_link_by_station_id(station_id)

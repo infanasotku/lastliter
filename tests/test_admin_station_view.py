@@ -1,7 +1,9 @@
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from markupsafe import Markup
 from mock import AsyncMock, MagicMock
 from starlette.datastructures import URL as StarletteURL
 from starlette.datastructures import FormData
@@ -15,6 +17,7 @@ from app.dto.station import (
     StartAddStationsByAreaCmd,
 )
 from app.infra.common.correlation import RequestContext, with_request_context
+from app.infra.postgres.models.station import Station
 
 
 def make_request(
@@ -116,6 +119,46 @@ class TestStationViewStationStats:
             {"confidence": 0.1, "hour": 9, "score": None, "weekday": 2},
         ]
         assert context["list_url"] == "http://testserver/station/list"
+
+
+class TestStationViewGdebenz:
+    def test_gdebenz_returns_extend_link_markup(self):
+        view = StationView()
+        station = Station(
+            id="station 1",
+            name="Station",
+            address="Address",
+            description=None,
+            lat=55.1,
+            lon=82.2,
+            last_fetched_at=datetime(2026, 7, 14, tzinfo=UTC),
+            next_fetch_at=datetime(2026, 7, 14, tzinfo=UTC),
+            fetch_interval_sec=3600,
+            fetch_error=None,
+            priority=1,
+            claimed_by=None,
+            lease_until=None,
+        )
+
+        link = view.gdebenz(station, "gdebenz")
+
+        assert isinstance(link, Markup)
+        assert str(link) == (
+            '<a href="/admin/station/extend/station%201" target="_blank" rel="noopener noreferrer">gdebenz</a>'
+        )
+
+    @pytest.mark.asyncio
+    async def test_extend_redirects_to_generated_gdebenz_link(self):
+        view = StationView()
+        get_link_by_station_id = AsyncMock(return_value="https://gdebenz.ru/s/token")
+        cast(Any, view).get_link_by_station_id = get_link_by_station_id
+        request = make_request(path_params={"station_id": "station-1"})
+
+        response = await view.extend(request)
+
+        get_link_by_station_id.assert_awaited_once_with("station-1")
+        assert response.status_code == 303
+        assert response.headers["location"] == "https://gdebenz.ru/s/token"
 
 
 class TestStationViewAddStationsByAreaForm:

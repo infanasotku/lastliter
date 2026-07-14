@@ -6,6 +6,7 @@ from app.controllers.admin.views.mixins import (
     AddStationBySharedLinkMixin,
     AddStationsByAreaForm,
     AddStationsByAreaMixin,
+    GdebenzLinkMixin,
     StationStatsMixin,
 )
 from app.infra.postgres.models.station import Station
@@ -18,6 +19,7 @@ __all__ = [
 
 
 class StationView(
+    GdebenzLinkMixin,
     StationStatsMixin,
     AddStationsByAreaMixin,
     AddStationBySharedLinkMixin,
@@ -28,7 +30,17 @@ class StationView(
     name = "Station"
     name_plural = "Stations"
 
-    column_list = "__all__"
+    column_list = [
+        Station.id,
+        Station.name,
+        Station.address,
+        "gdebenz",
+        Station.description,
+        Station.lat,
+        Station.lon,
+        Station.fetch_error,
+        Station.priority,
+    ]
     column_details_list = column_list
     page_size = 25
 

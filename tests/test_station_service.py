@@ -5,6 +5,7 @@ import pytest
 from mock import ANY, AsyncMock, MagicMock, call
 from pytest import fixture
 
+from app.domains.exception import StationNotFoundError
 from app.domains.station import Station
 from app.dto.station import (
     AddStationBySharedLinkCmd,
@@ -311,6 +312,44 @@ class TestStationServiceStartAddStationBySharedLink:
             },
             task_id="request-id",
         )
+
+
+class TestStationServiceGetLinkByStationId:
+    @pytest.mark.asyncio
+    async def test_returns_shared_link_for_existing_station(
+        self,
+        svc: StationService,
+        uow: MagicMock,
+        station_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        station_ctx.stations.get_by_id = AsyncMock(return_value=make_station("station-1"))
+        gdebenz.get_shared_link_by_station_id = AsyncMock(return_value="https://gdebenz.ru/s/token")
+
+        result = await svc.get_link_by_station_id("station-1")
+
+        assert result == "https://gdebenz.ru/s/token"
+        uow.begin.assert_called_once_with(write=False)
+        station_ctx.stations.get_by_id.assert_awaited_once_with("station-1")
+        gdebenz.get_shared_link_by_station_id.assert_awaited_once_with("station-1")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_station_is_not_found(
+        self,
+        svc: StationService,
+        uow: MagicMock,
+        station_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        station_ctx.stations.get_by_id = AsyncMock(return_value=None)
+        gdebenz.get_shared_link_by_station_id = AsyncMock()
+
+        with pytest.raises(StationNotFoundError, match="Station with id station-1 not found"):
+            await svc.get_link_by_station_id("station-1")
+
+        uow.begin.assert_called_once_with(write=False)
+        station_ctx.stations.get_by_id.assert_awaited_once_with("station-1")
+        gdebenz.get_shared_link_by_station_id.assert_not_awaited()
 
 
 class TestStationServiceGetStationStats:
