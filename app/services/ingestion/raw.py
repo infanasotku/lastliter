@@ -14,7 +14,7 @@ from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging.logger import get_logger
 from app.infra.redis.common import KEY_PREFIX
 from app.infra.redis.limit import RateLimiter
-from app.services.station.ingestion.base import _HeartbeatContext, _IngestionIterationUC, _station_ids
+from app.services.ingestion.base import _HeartbeatContext, _IngestionIterationUC, _station_ids
 
 logger = get_logger().getChild(__name__)
 

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.container import Container
-from app.controllers.loop.station import IngestionLoop
+from app.controllers.loop.ingestion import IngestionLoop
 from app.infra.logging.logger import get_logger
 
 logger = get_logger().getChild(__name__)

@@ -12,7 +12,7 @@ from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging.logger import get_logger
 from app.infra.postgres.uows import StationReadContext, StationWriteContext
 from app.infra.redis.limit import RateLimiter
-from app.services.station.ingestion.base import _HeartbeatContext, _HeartbeatStatus, _IngestionIterationUC, _station_ids
+from app.services.ingestion.base import _HeartbeatContext, _HeartbeatStatus, _IngestionIterationUC, _station_ids
 
 logger = get_logger().getChild(__name__)
 CLAIM_FOR_SECONDS = 60 * 5  # 5 minutes
@@ -39,7 +39,7 @@ class RunIngestionIterationUC:
     def _create_dependant_uc(self, hb_ctx: _HeartbeatContext) -> _IngestionIterationUC:
         match self.cmd.stage:
             case "fetch_raw":
-                from app.services.station.ingestion.raw import FetchRawObservationsUC
+                from app.services.ingestion.raw import FetchRawObservationsUC
 
                 return FetchRawObservationsUC(
                     self.cmd,

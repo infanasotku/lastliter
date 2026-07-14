@@ -10,7 +10,7 @@ from app.container import Container
 from app.dto.ingestion import RunIngestionIterationCmd
 from app.infra.common.correlation import RequestContext, with_request_context
 from app.infra.logging.logger import get_logger
-from app.services.station import StationService
+from app.services.ingestion import IngestionService
 
 IDLE_SLEEP_SECONDS = 5
 
@@ -29,7 +29,7 @@ class IngestionLoop:
         self,
         cmd: RunIngestionIterationCmd,
         #
-        svc: StationService = Provide[Container.station_service],
+        svc: IngestionService = Provide[Container.ingestion_service],
     ):
         loop_id = self._loop_id
         logger = self._logger

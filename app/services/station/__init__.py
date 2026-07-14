@@ -1,13 +1,11 @@
 from app.contracts.uow import UnitOfWork
 from app.domains.exception import StationNotFoundError
 from app.domains.stats import StationScore
-from app.dto.ingestion import RunIngestionIterationCmd
 from app.dto.station import GetStationStatsCmd
 from app.infra.clickhouse.repositories import StationContext
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging import get_logger
 from app.infra.postgres.uows import StationReadContext, StationWriteContext
-from app.infra.redis.limit import RateLimiter
 from app.services.station.add import AddStationBySharedLinkUC, AddStationsByAreaUC
 
 logger = get_logger().getChild(__name__)
@@ -20,11 +18,9 @@ class StationService:
         *,
         click_ctx: StationContext,
         gdebenz: HTTPGdeBenzClient,
-        limiter: RateLimiter,
     ) -> None:
         self._uow = uow
         self._gdebenz = gdebenz
-        self._limiter = limiter
         self._click_ctx = click_ctx
 
     # Async UC
@@ -44,17 +40,6 @@ class StationService:
         )
 
     # Single UC
-
-    async def run_ingestion_iteration(self, cmd: RunIngestionIterationCmd) -> bool:
-        from app.services.station.ingestion import RunIngestionIterationUC
-
-        return await RunIngestionIterationUC(
-            cmd,
-            uow=self._uow,
-            click_ctx=self._click_ctx,
-            gdebenz=self._gdebenz,
-            limiter=self._limiter,
-        ).run()
 
     async def get_station_stats(self, cmd: GetStationStatsCmd) -> list[StationScore]:
         from app.services.station.stats import GetStationStatsUC

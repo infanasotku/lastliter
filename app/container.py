@@ -9,6 +9,7 @@ from app.infra.postgres import create_engine
 from app.infra.postgres.uows import PgStationUnitOfWork
 from app.infra.redis import create_redis_context
 from app.infra.redis.limit import RateLimiter
+from app.services.ingestion import IngestionService
 from app.services.station import StationService
 
 
@@ -48,6 +49,13 @@ class Container(containers.DeclarativeContainer):
     # Svc
     station_service = providers.Factory(
         StationService,
+        station_uow,
+        gdebenz=gdebenz,
+        limiter=limiter,
+        click_ctx=station_ctx,
+    )
+    ingestion_service = providers.Factory(
+        IngestionService,
         station_uow,
         gdebenz=gdebenz,
         limiter=limiter,
