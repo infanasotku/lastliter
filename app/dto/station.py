@@ -69,6 +69,8 @@ class StationHourlyStats(BaseModel):
     queue_data_coverage_when_fuel: float | None
     bad_queue_probability_when_known: float | None
     avg_queue_severity_when_fuel: float | None
+    very_bad_queue_probability_when_known: float | None
+    service_unavailable_ratio: float | None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,4 +1,4 @@
-from app.domains.station import StationScore
+from app.domains.stats import StationScore
 from app.dto.station import GetStationStatsCmd
 from app.infra.clickhouse.repositories import StationContext
 
@@ -28,6 +28,8 @@ class GetStationStatsUC:
                 queue_data_coverage_when_fuel=stat.queue_data_coverage_when_fuel,
                 bad_queue_probability_when_known=stat.bad_queue_probability_when_known,
                 avg_queue_severity_when_fuel=stat.avg_queue_severity_when_fuel,
+                very_bad_queue_probability_when_known=stat.very_bad_queue_probability_when_known,
+                service_unavailable_ratio=stat.service_unavailable_ratio,
             )
             for stat in stats
         ]

@@ -383,6 +383,8 @@ class TestStationServiceGetStationStats:
                     queue_data_coverage_when_fuel=0.75,
                     bad_queue_probability_when_known=0.25,
                     avg_queue_severity_when_fuel=2.0,
+                    very_bad_queue_probability_when_known=0.1,
+                    service_unavailable_ratio=0.2,
                 ),
                 StationHourlyStats(
                     weekday=2,
@@ -393,6 +395,8 @@ class TestStationServiceGetStationStats:
                     queue_data_coverage_when_fuel=None,
                     bad_queue_probability_when_known=None,
                     avg_queue_severity_when_fuel=None,
+                    very_bad_queue_probability_when_known=None,
+                    service_unavailable_ratio=None,
                 ),
             ]
         )
@@ -401,7 +405,7 @@ class TestStationServiceGetStationStats:
 
         assert [score.hour for score in result] == [8, 9]
         assert [score.weekday for score in result] == [1, 2]
-        assert result[0].score == pytest.approx(0.57875)
+        assert result[0].score == pytest.approx(0.5475)
         assert result[0].confidence == pytest.approx(0.575)
         assert result[1].score is None
         assert result[1].confidence == pytest.approx(0.105)

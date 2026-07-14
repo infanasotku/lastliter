@@ -9,7 +9,7 @@ from starlette.datastructures import URL as StarletteURL
 from starlette.datastructures import FormData
 
 from app.controllers.admin.views.station import AddStationBySharedLinkForm, AddStationsByAreaForm, StationView
-from app.domains.station import StationScore
+from app.domains.stats import StationScore
 from app.dto.station import (
     AddStationsByAreaFilters,
     GetStationStatsCmd,

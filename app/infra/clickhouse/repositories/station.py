@@ -67,12 +67,17 @@ class ClickStationRepository(ClickHouseRepository):
             SELECT
                 weekday,
                 hour,
+                ----
                 observations_count,
                 fuel_available_ratio,
-                queue_probability_when_known,
+                ----
+                avg_queue_severity_when_fuel,
                 queue_data_coverage_when_fuel,
+                queue_probability_when_known,
                 bad_queue_probability_when_known,
-                avg_queue_severity_when_fuel
+                very_bad_queue_probability_when_known,
+                ----
+                service_unavailable_ratio
             FROM {_HOURLY_STATS_VIEW}
             WHERE station_id = '{station_id}'
             ORDER BY hour
@@ -82,12 +87,17 @@ class ClickStationRepository(ClickHouseRepository):
             StationHourlyStats(
                 weekday=row[0],
                 hour=row[1],
+                #
                 observations_count=row[2],
                 fuel_available_ratio=row[3],
-                queue_probability_when_known=row[4],
+                #
+                avg_queue_severity_when_fuel=row[4],
                 queue_data_coverage_when_fuel=row[5],
-                bad_queue_probability_when_known=row[6],
-                avg_queue_severity_when_fuel=row[7],
+                queue_probability_when_known=row[6],
+                bad_queue_probability_when_known=row[7],
+                very_bad_queue_probability_when_known=row[8],
+                #
+                service_unavailable_ratio=row[9],
             )
             for row in result.result_rows
         ]

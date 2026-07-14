@@ -6,7 +6,7 @@ from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
 from app.container import Container
-from app.domains.station import StationScore
+from app.domains.stats import StationScore
 from app.dto.station import GetStationStatsCmd
 from app.services.station import StationService
 

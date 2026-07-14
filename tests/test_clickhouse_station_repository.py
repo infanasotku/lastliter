@@ -61,8 +61,8 @@ class TestClickStationRepository:
         client = MagicMock()
         client.query = AsyncMock()
         client.query.return_value.result_rows = [
-            (1, 8, 12, 0.75, 0.25, 0.8, 0.1, 1.5),
-            (7, 20, 4, None, None, None, None, None),
+            (1, 8, 12, 0.75, 1.5, 0.8, 0.25, 0.1, 0.05, 0.2),
+            (7, 20, 4, None, None, None, None, None, None, None),
         ]
         repo = ClickStationRepository(client)
 
@@ -74,20 +74,24 @@ class TestClickStationRepository:
                 "hour": 8,
                 "observations_count": 12,
                 "fuel_available_ratio": 0.75,
-                "queue_probability_when_known": 0.25,
-                "queue_data_coverage_when_fuel": 0.8,
-                "bad_queue_probability_when_known": 0.1,
                 "avg_queue_severity_when_fuel": 1.5,
+                "queue_data_coverage_when_fuel": 0.8,
+                "queue_probability_when_known": 0.25,
+                "bad_queue_probability_when_known": 0.1,
+                "very_bad_queue_probability_when_known": 0.05,
+                "service_unavailable_ratio": 0.2,
             },
             {
                 "weekday": 7,
                 "hour": 20,
                 "observations_count": 4,
                 "fuel_available_ratio": None,
-                "queue_probability_when_known": None,
-                "queue_data_coverage_when_fuel": None,
-                "bad_queue_probability_when_known": None,
                 "avg_queue_severity_when_fuel": None,
+                "queue_data_coverage_when_fuel": None,
+                "queue_probability_when_known": None,
+                "bad_queue_probability_when_known": None,
+                "very_bad_queue_probability_when_known": None,
+                "service_unavailable_ratio": None,
             },
         ]
         query = client.query.await_args.args[0]

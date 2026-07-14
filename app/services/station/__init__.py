@@ -1,6 +1,6 @@
 from app.contracts.uow import UnitOfWork
 from app.domains.exception import StationNotFoundError
-from app.domains.station import StationScore
+from app.domains.stats import StationScore
 from app.dto.station import (
     GetStationStatsCmd,
     RunIngestionIterationCmd,

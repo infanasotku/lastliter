@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Self
 
 DEFAULT_FETCH_INTERVAL_SEC = 300  # 5 minutes
 FETCH_INTERVAL_AFTER_ERROR_SEC = 600  # 10 minutes
@@ -48,91 +47,3 @@ class Station:
         self.last_fetched_at = now
         self.next_fetch_at = now + timedelta(seconds=FETCH_INTERVAL_AFTER_ERROR_SEC)
         self.fetch_error = error
-
-
-@dataclass(frozen=True)
-class StationScore:
-    hour: int
-    weekday: int
-
-    score: float | None
-    confidence: float | None = None
-
-    @staticmethod
-    def calculate_queue_penalty(
-        *,
-        queue_probability_when_known: float | None,
-        queue_data_coverage_when_fuel: float | None,
-        avg_queue_severity_when_fuel: float | None,
-    ) -> float | None:
-        if queue_probability_when_known is None:
-            return None
-
-        queue_coverage = queue_data_coverage_when_fuel or 0.0
-        if avg_queue_severity_when_fuel is None:
-            normalized_avg_queue_severity = 0.5
-        else:
-            normalized_avg_queue_severity = avg_queue_severity_when_fuel / 4
-
-        return queue_probability_when_known * normalized_avg_queue_severity * queue_coverage
-
-    @staticmethod
-    def calculate_confidence(
-        *,
-        observations_count: int,
-        queue_data_coverage_when_fuel: float | None,
-    ) -> float | None:
-        sample_confidence = min(observations_count / 20, 1.0)
-        queue_coverage = queue_data_coverage_when_fuel or 0.0
-
-        return 0.7 * sample_confidence + 0.3 * queue_coverage
-
-    @staticmethod
-    def clamp_score(score: float) -> float:
-        return max(0.0, score)
-
-    @classmethod
-    def calc_score(
-        cls,
-        *,
-        hour: int,
-        weekday: int,
-        #
-        observations_count: int,
-        fuel_available_ratio: float | None,
-        queue_probability_when_known: float | None,
-        queue_data_coverage_when_fuel: float | None,
-        bad_queue_probability_when_known: float | None,
-        avg_queue_severity_when_fuel: float | None,
-    ) -> Self:
-        queue_penalty = cls.calculate_queue_penalty(
-            queue_probability_when_known=queue_probability_when_known,
-            queue_data_coverage_when_fuel=queue_data_coverage_when_fuel,
-            avg_queue_severity_when_fuel=avg_queue_severity_when_fuel,
-        )
-
-        if fuel_available_ratio is None:
-            score = None
-
-        else:
-            effective_queue_penalty = queue_penalty or 0.0
-            effective_bad_queue_probability = bad_queue_probability_when_known or 0.0
-            queue_uncertainty = 1.0 - (queue_data_coverage_when_fuel or 0.0)
-            raw_score = (
-                fuel_available_ratio
-                - 0.7 * effective_queue_penalty
-                - 0.2 * effective_bad_queue_probability
-                - 0.2 * queue_uncertainty * fuel_available_ratio
-            )
-            score = cls.clamp_score(raw_score)
-
-        confidence = cls.calculate_confidence(
-            observations_count=observations_count, queue_data_coverage_when_fuel=queue_data_coverage_when_fuel
-        )
-
-        return cls(
-            hour=hour,
-            weekday=weekday,
-            score=score,
-            confidence=confidence,
-        )
