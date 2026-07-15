@@ -7,6 +7,7 @@ from uuid import uuid4
 from dependency_injector.wiring import Provide, inject
 
 from app.container import Container
+from app.domains.state import PipelineType
 from app.dto.ingestion import RunIngestionIterationCmd
 from app.infra.common.correlation import RequestContext, with_request_context
 from app.infra.logging.logger import get_logger
@@ -68,7 +69,7 @@ class IngestionLoop:
         await self._run_loop(
             RunIngestionIterationCmd(
                 owner=self._loop_id,
-                pipeline_type="fetch_raw",
+                pipeline_type=PipelineType.FETCH_RAW,
                 batch_size=FETCH_RAW_BATCH_SIZE,
             )
         )
@@ -80,7 +81,7 @@ class IngestionLoop:
                 self._wrap(
                     RunIngestionIterationCmd(
                         owner=self._loop_id,
-                        pipeline_type="fetch_raw",
+                        pipeline_type=PipelineType.FETCH_RAW,
                         batch_size=FETCH_RAW_BATCH_SIZE,
                     )
                 )

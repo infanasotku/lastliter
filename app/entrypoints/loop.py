@@ -13,7 +13,7 @@ def create_app() -> FastAPI:
     logger.info("Creating loop application")
 
     container = Container()
-    container.wire(modules=["app.controllers.loop.station"])
+    container.wire(modules=["app.controllers.loop.ingestion"])
 
     loop = IngestionLoop()
 
