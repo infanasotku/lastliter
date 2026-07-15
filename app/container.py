@@ -51,7 +51,6 @@ class Container(containers.DeclarativeContainer):
         StationService,
         uow,
         gdebenz=gdebenz,
-        limiter=limiter,
         click_ctx=station_ctx,
     )
     ingestion_service = providers.Factory(
