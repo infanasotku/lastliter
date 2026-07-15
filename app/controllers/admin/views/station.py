@@ -29,6 +29,7 @@ class StationView(
     can_create, can_delete, can_edit, can_export = False, False, False, False
     name = "Station"
     name_plural = "Stations"
+    icon = "fa-solid fa-gas-pump"
 
     column_list = [
         Station.id,

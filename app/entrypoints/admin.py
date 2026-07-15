@@ -6,7 +6,7 @@ from sqladmin import Admin
 
 from app.container import Container
 from app.controllers.admin.auth import AdminAuthenticationBackend
-from app.controllers.admin.views import station
+from app.controllers.admin.views import state, station
 from app.controllers.api import middlewares
 from app.controllers.api import router as v1
 from app.infra.logging.logger import get_logger
@@ -72,6 +72,7 @@ def create_app() -> FastAPI:
         templates_dir="app/controllers/admin/templates",
     )
     admin.add_view(station.StationView)
+    admin.add_view(state.IngestionPipelineStateView)
     logger.info("Admin panel registered")
 
     logger.info("Admin application created")
