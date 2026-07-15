@@ -1,6 +1,6 @@
-from sqladmin import ModelView
 from starlette.requests import Request
 
+from app.controllers.admin.views.base import AdminModelView
 from app.controllers.admin.views.mixins import (
     AddStationBySharedLinkForm,
     AddStationBySharedLinkMixin,
@@ -23,7 +23,7 @@ class StationView(
     StationStatsMixin,
     AddStationsByAreaMixin,
     AddStationBySharedLinkMixin,
-    ModelView,
+    AdminModelView,
     model=Station,
 ):
     can_create, can_delete, can_edit, can_export = False, False, False, False

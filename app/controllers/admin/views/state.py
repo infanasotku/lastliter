@@ -1,11 +1,11 @@
-from sqladmin import ModelView
 from sqladmin.filters import StaticValuesFilter
 
+from app.controllers.admin.views.base import AdminModelView
 from app.domains.state import PipelineType
 from app.infra.postgres.models.ingestion import IngestionPipelineState
 
 
-class IngestionPipelineStateView(ModelView, model=IngestionPipelineState):
+class IngestionPipelineStateView(AdminModelView, model=IngestionPipelineState):
     """Admin view for IngestionPipelineState model."""
 
     can_create, can_delete, can_edit, can_export = False, False, False, False

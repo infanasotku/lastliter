@@ -1,0 +1,17 @@
+<script>
+  (() => {
+    const timezone =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || 'Локальная таймзона';
+
+    for (const element of document.querySelectorAll('[data-browser-datetime]')) {
+      const date = new Date(element.dateTime);
+      if (Number.isNaN(date.getTime())) continue;
+
+      element.textContent = date.toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'medium',
+      });
+      element.title = timezone;
+    }
+  })();
+</script>

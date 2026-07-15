@@ -1,0 +1,6 @@
+{% extends "sqladmin/list.html" %}
+
+{% block content %}
+{{ super() }}
+{% include "admin/_browser_datetime.html" %}
+{% endblock %}
