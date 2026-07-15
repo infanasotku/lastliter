@@ -29,7 +29,7 @@ class Container(containers.DeclarativeContainer):
     read_sessionmaker = providers.Singleton(async_sessionmaker[AsyncSession], read_engine)
     write_sessionmaker = providers.Singleton(async_sessionmaker[AsyncSession], write_engine)
 
-    station_uow = providers.Factory(
+    uow = providers.Factory(
         PgStationUnitOfWork,
         read_sessionmaker=read_sessionmaker,
         write_sessionmaker=write_sessionmaker,
@@ -49,14 +49,14 @@ class Container(containers.DeclarativeContainer):
     # Svc
     station_service = providers.Factory(
         StationService,
-        station_uow,
+        uow,
         gdebenz=gdebenz,
         limiter=limiter,
         click_ctx=station_ctx,
     )
     ingestion_service = providers.Factory(
         IngestionService,
-        station_uow,
+        uow,
         gdebenz=gdebenz,
         limiter=limiter,
         click_ctx=station_ctx,

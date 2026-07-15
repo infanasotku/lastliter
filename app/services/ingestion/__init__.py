@@ -3,7 +3,7 @@ from app.dto.ingestion import RunIngestionIterationCmd
 from app.infra.clickhouse.repositories import StationContext
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging import get_logger
-from app.infra.postgres.uows import StationReadContext, StationWriteContext
+from app.infra.postgres.uows import IngestionReadContext, IngestionWriteContext
 from app.infra.redis.limit import RateLimiter
 
 logger = get_logger().getChild(__name__)
@@ -12,7 +12,7 @@ logger = get_logger().getChild(__name__)
 class IngestionService:
     def __init__(
         self,
-        uow: UnitOfWork[StationReadContext, StationWriteContext],
+        uow: UnitOfWork[IngestionReadContext, IngestionWriteContext],
         *,
         click_ctx: StationContext,
         gdebenz: HTTPGdeBenzClient,

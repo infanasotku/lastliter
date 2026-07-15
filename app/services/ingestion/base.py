@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from app.domains.station import Station
+from app.domains.state import IngestionPipelineState
 
 
 class _HeartbeatStatus(StrEnum):
@@ -13,23 +13,23 @@ class _HeartbeatStatus(StrEnum):
 
 @dataclass
 class _HeartbeatContext:
-    leased_stations: list[Station]
+    leased_states: list[IngestionPipelineState]
 
     status: _HeartbeatStatus
     error: str | None = None
 
-    def retain_active(self, active_stations: list[Station]) -> None:
-        ids = {station.id for station in active_stations}
-        self.leased_stations = [station for station in self.leased_stations if station.id in ids]
+    def retain_active(self, active_states: list[IngestionPipelineState]) -> None:
+        ids = {station.station_id for station in active_states}
+        self.leased_states = [station for station in self.leased_states if station.station_id in ids]
 
     @property
     def exhausted(self) -> bool:
-        return self.status == _HeartbeatStatus.ERROR or not self.leased_stations
+        return self.status == _HeartbeatStatus.ERROR or not self.leased_states
 
 
-def _station_ids(stations: list[Station]) -> list[str]:
-    return [station.id for station in stations]
+def _station_ids(states: list[IngestionPipelineState]) -> list[str]:
+    return [state.station_id for state in states]
 
 
 class _IngestionIterationUC(Protocol):
-    async def run(self, stations: list[Station]) -> None: ...
+    async def run(self, states: list[IngestionPipelineState]) -> None: ...

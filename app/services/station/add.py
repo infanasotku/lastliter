@@ -1,4 +1,8 @@
+from datetime import datetime, timezone
+from itertools import chain
+
 from app.contracts.uow import UnitOfWork
+from app.domains.state import IngestionPipelineState
 from app.domains.station import Station
 from app.dto.station import (
     AddStationBySharedLinkCmd,
@@ -7,6 +11,7 @@ from app.dto.station import (
     StartAddStationBySharedLinkCmd,
     StartAddStationsByAreaCmd,
 )
+from app.infra.common.time import now_utc
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging.logger import get_logger
 from app.infra.postgres.uows import StationReadContext, StationWriteContext
@@ -94,18 +99,19 @@ class AddStationsByAreaUC:
                 "skipped_count": len(stations) - len(filtered_stations),
             },
         )
-        async with self._uow.begin(write=True) as uow:
-            inserted_stations = await uow.stations.insert_many_safe(filtered_stations)
+        async with self._uow.begin(write=True) as ctx:
+            inserted_stations = await ctx.stations.insert_many_safe(filtered_stations)
+            await sync_pipeline_states(ctx, inserted_stations=inserted_stations)
 
         logger.info(
-            f"Station add by area finished, inserted {inserted_stations} new stations",
+            f"Station add by area finished, inserted {len(inserted_stations)} new stations",
             extra={
-                "inserted_count": inserted_stations,
+                "inserted_count": len(inserted_stations),
                 "valid_count": len(filtered_stations),
             },
         )
         return AddStationsByAreaResult(
-            inserted_count=inserted_stations,
+            inserted_count=len(inserted_stations),
         )
 
 
@@ -149,16 +155,44 @@ class AddStationBySharedLinkUC:
             )
             return False
 
-        async with self._uow.begin(write=True) as uow:
-            inserted_stations = await uow.stations.insert_many_safe([station])
+        async with self._uow.begin(write=True) as ctx:
+            inserted_stations = await ctx.stations.insert_many_safe([station])
+            await sync_pipeline_states(ctx, inserted_stations=inserted_stations)
 
         logger.info(
-            f"Station add by shared link finished, inserted {inserted_stations} new stations",
+            f"Station add by shared link finished, inserted {len(inserted_stations)} new stations",
             extra={
-                "inserted_count": inserted_stations,
+                "inserted_count": len(inserted_stations),
                 "station_id": station.id,
                 "station_name": station.name,
             },
         )
 
-        return inserted_stations > 0
+        return len(inserted_stations) > 0
+
+
+async def sync_pipeline_states(
+    ctx: StationWriteContext,
+    *,
+    inserted_stations: list[Station],
+) -> None:
+    pipes = list(
+        chain(
+            *(
+                IngestionPipelineState.from_station(
+                    station, now=now_utc(), min_time=datetime.min.replace(tzinfo=timezone.utc)
+                )
+                for station in inserted_stations
+            )
+        )
+    )
+
+    inserted = await ctx.states.insert_many_safe(pipes)
+    logger.info(
+        f"Station pipeline state sync finished, inserted {inserted} pipeline states for {len(inserted_stations)} stations",
+        extra={
+            "inserted_pipeline_states_count": inserted,
+            "inserted_stations_count": len(inserted_stations),
+            "station_ids": [station.id for station in inserted_stations],
+        },
+    )

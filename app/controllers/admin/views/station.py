@@ -38,8 +38,6 @@ class StationView(
         Station.description,
         Station.lat,
         Station.lon,
-        Station.fetch_error,
-        Station.priority,
     ]
     column_details_list = column_list
     page_size = 25

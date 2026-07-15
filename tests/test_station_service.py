@@ -1,10 +1,9 @@
-from datetime import datetime, timezone
-
 import pytest
 from mock import AsyncMock, MagicMock
 from pytest import fixture
 
 from app.domains.exception import StationNotFoundError
+from app.domains.state import PipelineType
 from app.domains.station import Station
 from app.dto.station import (
     AddStationBySharedLinkCmd,
@@ -23,7 +22,9 @@ from app.services.station import StationService
 def station_ctx() -> MagicMock:
     ctx = MagicMock()
     ctx.stations = MagicMock()
-    ctx.stations.insert_many_safe = AsyncMock(return_value=2)
+    ctx.stations.insert_many_safe = AsyncMock()
+    ctx.states = MagicMock()
+    ctx.states.insert_many_safe = AsyncMock(return_value=0)
     return ctx
 
 
@@ -76,9 +77,6 @@ def make_station(
         address=address,
         lat=55.1,
         lon=82.2,
-        last_fetched_at=datetime.min.replace(tzinfo=timezone.utc),
-        next_fetch_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        fetch_interval_sec=300,
     )
 
 
@@ -95,6 +93,8 @@ class TestStationServiceAddStationsByArea:
         empty_name_station = make_station("station-2", name="")
         empty_address_station = make_station("station-3", address="")
         another_valid_station = make_station("station-4", name="Another", address="Another street")
+        station_ctx.stations.insert_many_safe.return_value = [valid_station, another_valid_station]
+        station_ctx.states.insert_many_safe.return_value = 2
         gdebenz.get_stations.return_value = [
             valid_station,
             empty_name_station,
@@ -124,6 +124,12 @@ class TestStationServiceAddStationsByArea:
                 another_valid_station,
             ]
         )
+        state_args = station_ctx.states.insert_many_safe.await_args.args[0]
+        assert [state.station_id for state in state_args] == ["station-1", "station-4"]
+        assert [state.pipeline_type for state in state_args] == [PipelineType.FETCH_RAW, PipelineType.FETCH_RAW]
+        assert all(state.interval_sec == 300 for state in state_args)
+        assert all(state.priority == 0 for state in state_args)
+        assert all(state.error is None for state in state_args)
 
     @pytest.mark.asyncio
     async def test_filters_stations_by_name(
@@ -132,8 +138,8 @@ class TestStationServiceAddStationsByArea:
         station_ctx: MagicMock,
         gdebenz: MagicMock,
     ):
-        station_ctx.stations.insert_many_safe.return_value = 1
         matching_station = make_station("station-1", name="Gazprom")
+        station_ctx.stations.insert_many_safe.return_value = [matching_station]
         other_station = make_station("station-2", name="Lukoil")
         gdebenz.get_stations.return_value = [
             matching_station,
@@ -151,6 +157,8 @@ class TestStationServiceAddStationsByArea:
 
         assert result == AddStationsByAreaResult(inserted_count=1)
         station_ctx.stations.insert_many_safe.assert_awaited_once_with([matching_station])
+        state_args = station_ctx.states.insert_many_safe.await_args.args[0]
+        assert [state.station_id for state in state_args] == ["station-1"]
 
     @pytest.mark.asyncio
     async def test_filters_stations_by_id(
@@ -159,8 +167,8 @@ class TestStationServiceAddStationsByArea:
         station_ctx: MagicMock,
         gdebenz: MagicMock,
     ):
-        station_ctx.stations.insert_many_safe.return_value = 1
         matching_station = make_station("station-1", name="Gazprom")
+        station_ctx.stations.insert_many_safe.return_value = [matching_station]
         other_station = make_station("station-2", name="Gazprom")
         gdebenz.get_stations.return_value = [
             matching_station,
@@ -178,6 +186,8 @@ class TestStationServiceAddStationsByArea:
 
         assert result == AddStationsByAreaResult(inserted_count=1)
         station_ctx.stations.insert_many_safe.assert_awaited_once_with([matching_station])
+        state_args = station_ctx.states.insert_many_safe.await_args.args[0]
+        assert [state.station_id for state in state_args] == ["station-1"]
 
     @pytest.mark.asyncio
     async def test_returns_zero_when_all_stations_are_filtered_out(
@@ -186,7 +196,7 @@ class TestStationServiceAddStationsByArea:
         station_ctx: MagicMock,
         gdebenz: MagicMock,
     ):
-        station_ctx.stations.insert_many_safe.return_value = 0
+        station_ctx.stations.insert_many_safe.return_value = []
         gdebenz.get_stations.return_value = [
             make_station("station-1", name=""),
             make_station("station-2", address=""),
@@ -202,6 +212,7 @@ class TestStationServiceAddStationsByArea:
 
         assert result == AddStationsByAreaResult(inserted_count=0)
         station_ctx.stations.insert_many_safe.assert_awaited_once_with([])
+        station_ctx.states.insert_many_safe.assert_awaited_once_with([])
 
 
 class TestStationServiceStartAddStationsByArea:
@@ -251,7 +262,8 @@ class TestStationServiceAddStationBySharedLink:
     ):
         station = make_station("station-1", name="Gazprom")
         gdebenz.get_station_by_shared_link = AsyncMock(return_value=station)
-        station_ctx.stations.insert_many_safe.return_value = 1
+        station_ctx.stations.insert_many_safe.return_value = [station]
+        station_ctx.states.insert_many_safe.return_value = 1
         cmd = AddStationBySharedLinkCmd(shared_link="https://gdebenz.ru/s/token")
 
         result = await svc.add_by_shared_link.process(cmd)
@@ -259,6 +271,9 @@ class TestStationServiceAddStationBySharedLink:
         assert result is True
         gdebenz.get_station_by_shared_link.assert_awaited_once_with("https://gdebenz.ru/s/token")
         station_ctx.stations.insert_many_safe.assert_awaited_once_with([station])
+        state_args = station_ctx.states.insert_many_safe.await_args.args[0]
+        assert [state.station_id for state in state_args] == ["station-1"]
+        assert state_args[0].pipeline_type == PipelineType.FETCH_RAW
 
     @pytest.mark.asyncio
     async def test_returns_false_when_station_is_not_found_by_shared_link(
@@ -275,6 +290,7 @@ class TestStationServiceAddStationBySharedLink:
         assert result is False
         gdebenz.get_station_by_shared_link.assert_awaited_once_with("https://gdebenz.ru/s/unknown")
         station_ctx.stations.insert_many_safe.assert_not_awaited()
+        station_ctx.states.insert_many_safe.assert_not_awaited()
 
 
 class TestStationServiceStartAddStationBySharedLink:

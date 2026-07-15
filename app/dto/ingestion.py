@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.domains.state import PipelineType
+
 
 class RawStationObservation(BaseModel):
     status: Literal["queue", "yes", "no", "low"]
@@ -23,6 +25,6 @@ class FetchRawStationObservations(BaseModel):
 
 class RunIngestionIterationCmd(BaseModel):
     owner: str
-    stage: Literal["fetch_raw"]
+    pipeline_type: PipelineType
 
     batch_size: int = 10

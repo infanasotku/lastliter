@@ -2,28 +2,33 @@ from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
+from app.infra.postgres.repositories.state import PgIngestionStateRepository, PgIngestionStateWriteRepository
 from app.infra.postgres.repositories.station import PgStationRepository, PgStationWriteRepository
 from app.infra.postgres.uows.base import PgReadUOWContext, PgUnitOfWork, PgWriteUOWContext
 
 
 class StationReadContext(Protocol):
     stations: PgStationRepository
+    states: PgIngestionStateRepository
 
 
 class StationWriteContext(Protocol):
     stations: PgStationWriteRepository
+    states: PgIngestionStateWriteRepository
 
 
 class PgStationReadContext(PgReadUOWContext):
     def __init__(self, *, session: AsyncSession):
         super().__init__(session=session)
         self.stations = PgStationRepository(session)
+        self.states = PgIngestionStateRepository(session)
 
 
 class PgStationWriteContext(PgWriteUOWContext):
     def __init__(self, *, session: AsyncSession, transaction: AsyncSessionTransaction):
         super().__init__(session=session, transaction=transaction)
         self.stations = PgStationWriteRepository(session)
+        self.states = PgIngestionStateWriteRepository(session)
 
 
 class PgStationUnitOfWork(PgUnitOfWork[PgStationReadContext, PgStationWriteContext]):

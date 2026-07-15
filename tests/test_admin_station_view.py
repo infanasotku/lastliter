@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -131,13 +130,6 @@ class TestStationViewGdebenz:
             description=None,
             lat=55.1,
             lon=82.2,
-            last_fetched_at=datetime(2026, 7, 14, tzinfo=UTC),
-            next_fetch_at=datetime(2026, 7, 14, tzinfo=UTC),
-            fetch_interval_sec=3600,
-            fetch_error=None,
-            priority=1,
-            claimed_by=None,
-            lease_until=None,
         )
 
         link = view.gdebenz(station, "gdebenz")

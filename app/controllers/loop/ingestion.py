@@ -35,25 +35,25 @@ class IngestionLoop:
         logger = self._logger
 
         logger.info(
-            f"Starting {cmd.stage} station ingestion loop with owner {loop_id}",
-            extra={"owner": loop_id, "stage": cmd.stage},
+            f"Starting {cmd.pipeline_type} station ingestion loop with owner {loop_id}",
+            extra={"owner": loop_id, "stage": cmd.pipeline_type},
         )
         while True:
             with with_request_context(RequestContext(request_id=str(uuid4()))):
                 logger.info(
-                    f"Starting {cmd.stage} station ingestion loop iteration for owner {loop_id}",
-                    extra={"owner": loop_id, "stage": cmd.stage},
+                    f"Starting {cmd.pipeline_type} station ingestion loop iteration for owner {loop_id}",
+                    extra={"owner": loop_id, "stage": cmd.pipeline_type},
                 )
                 has_work = await svc.run_ingestion_iteration(cmd)
                 logger.info(
-                    f"{cmd.stage} station ingestion loop iteration finished for owner {loop_id}: has_work={has_work}",
-                    extra={"owner": loop_id, "stage": cmd.stage, "has_work": has_work},
+                    f"{cmd.pipeline_type} station ingestion loop iteration finished for owner {loop_id}: has_work={has_work}",
+                    extra={"owner": loop_id, "stage": cmd.pipeline_type, "has_work": has_work},
                 )
 
             if not has_work:
                 logger.info(
-                    f"{cmd.stage} station ingestion loop is idle for owner {loop_id}, sleeping {IDLE_SLEEP_SECONDS} seconds",
-                    extra={"owner": loop_id, "stage": cmd.stage, "idle_sleep_seconds": IDLE_SLEEP_SECONDS},
+                    f"{cmd.pipeline_type} station ingestion loop is idle for owner {loop_id}, sleeping {IDLE_SLEEP_SECONDS} seconds",
+                    extra={"owner": loop_id, "stage": cmd.pipeline_type, "idle_sleep_seconds": IDLE_SLEEP_SECONDS},
                 )
                 await asyncio.sleep(IDLE_SLEEP_SECONDS)
 
@@ -68,7 +68,7 @@ class IngestionLoop:
         await self._run_loop(
             RunIngestionIterationCmd(
                 owner=self._loop_id,
-                stage="fetch_raw",
+                pipeline_type="fetch_raw",
                 batch_size=FETCH_RAW_BATCH_SIZE,
             )
         )
@@ -80,7 +80,7 @@ class IngestionLoop:
                 self._wrap(
                     RunIngestionIterationCmd(
                         owner=self._loop_id,
-                        stage="fetch_raw",
+                        pipeline_type="fetch_raw",
                         batch_size=FETCH_RAW_BATCH_SIZE,
                     )
                 )
