@@ -7,18 +7,41 @@
   .page-wrapper {
     height: 100vh;
     min-height: 0;
+    overflow: hidden;
   }
 
-  .page-body,
+  .page-wrapper > .container-fluid {
+    display: none;
+  }
+
+  .page-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0 !important;
+  }
+
   .page-body > .container-fluid,
   .page-body .row-deck {
+    width: 100%;
+    max-width: none;
     height: 100%;
-    margin: 0;
-    padding: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .page-body .row-deck {
+    --tblr-gutter-x: 0;
+    --tblr-gutter-y: 0;
+  }
+
+  .page-body .row-deck > * {
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .station-map-frame {
     display: block;
+    flex: 1 1 auto;
     width: 100%;
     height: 100%;
     border: 0;
