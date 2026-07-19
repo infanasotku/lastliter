@@ -1,4 +1,5 @@
 config:
   ENV: prod
   ADMIN__USERNAME: admin
+  ADMIN__MAP_URL: https://lastliter-map.test.infanasotku.com
   REDIS__CLIENT: lastliter-test
