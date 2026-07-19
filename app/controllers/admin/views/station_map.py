@@ -7,7 +7,7 @@ from starlette.responses import Response
 from app.contracts.uow import UnitOfWork
 from app.infra.postgres.uows import StationReadContext, StationWriteContext
 
-MAP_PROTOCOL_VERSION = 1
+MAP_PROTOCOL_VERSION = 2
 
 
 def _get_origin(url: str) -> str:
@@ -56,6 +56,8 @@ class StationMapView(BaseView):
                     "address": station.address,
                     "latitude": station.lat,
                     "longitude": station.lon,
+                    "score": None,
+                    "confidence": None,
                 }
                 for station in stations
             ],

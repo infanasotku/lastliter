@@ -59,7 +59,7 @@ async def test_station_map_view_renders_iframe_page():
                 "mapOrigin": "https://map.example.test",
                 "context": {
                     "type": "lastliter:admin-context",
-                    "version": 1,
+                    "version": 2,
                     "mode": "admin",
                     "capabilities": {"openStation": True},
                     "stations": [
@@ -69,6 +69,8 @@ async def test_station_map_view_renders_iframe_page():
                             "address": "Test address",
                             "latitude": 54.99,
                             "longitude": 82.98,
+                            "score": None,
+                            "confidence": None,
                         }
                     ],
                 },

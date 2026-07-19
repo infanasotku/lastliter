@@ -75,8 +75,7 @@
       }
 
       if (
-        event.data?.type === "lastliter:map-ready" &&
-        event.data?.version === context.version
+        event.data?.type === "lastliter:map-ready"
       ) {
         sendContext();
         return;
