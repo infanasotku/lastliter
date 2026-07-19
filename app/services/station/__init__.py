@@ -1,7 +1,7 @@
 from app.contracts.uow import UnitOfWork
 from app.domains.exception import StationNotFoundError
 from app.domains.stats import StationScore
-from app.dto.station import GetStationStatsCmd
+from app.dto.station import GetStationStatsCmd, StationDTO
 from app.infra.clickhouse.repositories import StationContext
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging import get_logger
@@ -47,6 +47,14 @@ class StationService:
         return await GetStationStatsUC(
             click_ctx=self._click_ctx,
         ).run(cmd)
+
+    async def get_all_stations(self) -> list[StationDTO]:
+        from app.services.station.get import GetAllStationsUC
+
+        return await GetAllStationsUC(
+            uow=self._uow,
+            click_ctx=self._click_ctx,
+        ).run()
 
     # Common
 

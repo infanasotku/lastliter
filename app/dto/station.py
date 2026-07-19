@@ -1,4 +1,31 @@
+from typing import Self
+
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.domains.station import Station
+
+
+class StationDTO(BaseModel):
+    id: str
+
+    name: str
+    address: str
+
+    lat: float
+    lon: float
+
+    score: float | None = None
+    confidence: float | None = None
+
+    @classmethod
+    def from_domain(cls, station: Station) -> Self:
+        return cls(
+            id=station.id,
+            name=station.name,
+            address=station.address,
+            lat=station.lat,
+            lon=station.lon,
+        )
 
 
 class AddStationsByAreaFilters(BaseModel):

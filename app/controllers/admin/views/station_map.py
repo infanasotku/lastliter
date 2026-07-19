@@ -1,11 +1,13 @@
 from urllib.parse import urlsplit
 
+from dependency_injector.wiring import Provide, inject
 from sqladmin import BaseView, expose
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.contracts.uow import UnitOfWork
-from app.infra.postgres.uows import StationReadContext, StationWriteContext
+from app.container import Container
+from app.dto.station import StationDTO
+from app.services.station import StationService
 
 MAP_PROTOCOL_VERSION = 2
 
@@ -24,15 +26,10 @@ class StationMapView(BaseView):
     category_icon = "fa-solid fa-gas-pump"
 
     map_url = "http://localhost:5173"
-    uow: UnitOfWork[StationReadContext, StationWriteContext] | None = None
 
     @expose("/stations/map", identity="station-map")
     async def station_map(self, request: Request) -> Response:
-        if self.uow is None:
-            raise RuntimeError("StationMapView unit of work is not configured")
-
-        async with self.uow.begin(write=False) as ctx:
-            stations = await ctx.stations.get_all()
+        stations = await self.get_all_stations()
 
         station_details_urls = {
             station.id: str(
@@ -56,8 +53,8 @@ class StationMapView(BaseView):
                     "address": station.address,
                     "latitude": station.lat,
                     "longitude": station.lon,
-                    "score": None,
-                    "confidence": None,
+                    "score": station.score,
+                    "confidence": station.confidence,
                 }
                 for station in stations
             ],
@@ -75,3 +72,10 @@ class StationMapView(BaseView):
                 },
             },
         )
+
+    @inject
+    async def get_all_stations(
+        self,
+        svc: StationService = Provide[Container.station_service],
+    ) -> list[StationDTO]:
+        return await svc.get_all_stations()

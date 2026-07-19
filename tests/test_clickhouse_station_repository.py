@@ -98,3 +98,30 @@ class TestClickStationRepository:
         assert "FROM station_hourly_stats_v" in query
         assert "WHERE station_id = 'station-1'" in query
         assert "ORDER BY hour" in query
+
+    @pytest.mark.asyncio
+    async def test_get_stations_stats_for_spot_preserves_station_order_and_gaps(self):
+        client = MagicMock()
+        client.query = AsyncMock()
+        client.query.return_value.result_rows = [
+            (1, 8, 12, 0.75, 1.5, 0.8, 0.25, 0.1, 0.05, 0.2, "station-2"),
+        ]
+        repo = ClickStationRepository(client)
+
+        stats = await repo.get_stations_stats_for_spot(
+            ["station-1", "station-2", "station-3"],
+            hour=8,
+            weekday=1,
+        )
+
+        assert stats[0] is None
+        assert stats[1] is not None
+        assert stats[1].observations_count == 12
+        assert stats[2] is None
+        query = client.query.await_args.args[0]
+        assert "station_id IN {station_ids:Array(String)}" in query
+        assert client.query.await_args.kwargs["parameters"] == {
+            "station_ids": ["station-1", "station-2", "station-3"],
+            "hour": 8,
+            "weekday": 1,
+        }

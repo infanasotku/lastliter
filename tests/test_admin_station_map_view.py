@@ -6,7 +6,7 @@ from mock import AsyncMock, MagicMock
 
 from app.controllers.admin.views.station import StationView
 from app.controllers.admin.views.station_map import StationMapView, _get_origin
-from app.domains.station import Station
+from app.dto.station import StationDTO
 
 
 def test_station_views_share_stations_category():
@@ -22,23 +22,33 @@ def test_station_views_share_stations_category():
 
 
 @pytest.mark.asyncio
+async def test_station_map_view_delegates_station_loading_to_service():
+    view = StationMapView()
+    svc = SimpleNamespace(get_all_stations=AsyncMock(return_value=[]))
+
+    result = await view.get_all_stations(svc=svc)
+
+    assert result == []
+    svc.get_all_stations.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_station_map_view_renders_iframe_page():
     view = StationMapView()
     view.map_url = "https://map.example.test/app"
     stations = [
-        Station(
+        StationDTO(
             id="station-1",
             name="Test station",
             address="Test address",
             lat=54.99,
             lon=82.98,
+            score=0.7,
+            confidence=0.5,
         )
     ]
-    context = SimpleNamespace(stations=SimpleNamespace(get_all=AsyncMock(return_value=stations)))
-    begin = MagicMock()
-    begin.__aenter__ = AsyncMock(return_value=context)
-    begin.__aexit__ = AsyncMock(return_value=None)
-    view.uow = SimpleNamespace(begin=MagicMock(return_value=begin))
+    get_all_stations_mock = AsyncMock(return_value=stations)
+    cast(Any, view).get_all_stations = get_all_stations_mock
     template_response = MagicMock()
     template_response_mock = AsyncMock(return_value=template_response)
     cast(Any, view).templates = SimpleNamespace(TemplateResponse=template_response_mock)
@@ -48,8 +58,7 @@ async def test_station_map_view_renders_iframe_page():
     response = await view.station_map(request)
 
     assert response is template_response
-    view.uow.begin.assert_called_once_with(write=False)
-    context.stations.get_all.assert_awaited_once_with()
+    get_all_stations_mock.assert_awaited_once_with()
     template_response_mock.assert_awaited_once_with(
         request,
         "station_map.html",
@@ -69,8 +78,8 @@ async def test_station_map_view_renders_iframe_page():
                             "address": "Test address",
                             "latitude": 54.99,
                             "longitude": 82.98,
-                            "score": None,
-                            "confidence": None,
+                            "score": 0.7,
+                            "confidence": 0.5,
                         }
                     ],
                 },

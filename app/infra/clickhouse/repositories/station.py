@@ -102,3 +102,63 @@ class ClickStationRepository(ClickHouseRepository):
             )
             for row in result.result_rows
         ]
+
+    async def get_stations_stats_for_spot(
+        self, station_ids: list[str], *, hour: int, weekday: int
+    ) -> list[StationHourlyStats | None]:
+        if not station_ids:
+            return []
+
+        result = await self._client.query(
+            f"""
+            SELECT
+                weekday,
+                hour,
+                ----
+                observations_count,
+                fuel_available_ratio,
+                ----
+                avg_queue_severity_when_fuel,
+                queue_data_coverage_when_fuel,
+                queue_probability_when_known,
+                bad_queue_probability_when_known,
+                very_bad_queue_probability_when_known,
+                ----
+                service_unavailable_ratio,
+                ----
+                ----
+                station_id
+            FROM {_HOURLY_STATS_VIEW}
+            WHERE (
+                station_id IN {{station_ids:Array(String)}}
+                AND hour = {{hour:UInt8}}
+                AND weekday = {{weekday:UInt8}}
+            )
+            """,
+            parameters={
+                "station_ids": station_ids,
+                "hour": hour,
+                "weekday": weekday,
+            },
+        )
+
+        stat_dict = {
+            row[10]: StationHourlyStats(
+                weekday=row[0],
+                hour=row[1],
+                #
+                observations_count=row[2],
+                fuel_available_ratio=row[3],
+                #
+                avg_queue_severity_when_fuel=row[4],
+                queue_data_coverage_when_fuel=row[5],
+                queue_probability_when_known=row[6],
+                bad_queue_probability_when_known=row[7],
+                very_bad_queue_probability_when_known=row[8],
+                #
+                service_unavailable_ratio=row[9],
+            )
+            for row in result.result_rows
+        }
+
+        return [stat_dict.get(station_id) for station_id in station_ids]

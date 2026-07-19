@@ -1,5 +1,7 @@
+from datetime import datetime, timezone
+
 import pytest
-from mock import AsyncMock, MagicMock
+from mock import AsyncMock, MagicMock, patch
 from pytest import fixture
 
 from app.domains.exception import StationNotFoundError
@@ -414,3 +416,65 @@ class TestStationServiceGetStationStats:
         assert result[0].confidence == pytest.approx(0.575)
         assert result[1].score is None
         assert result[1].confidence == pytest.approx(0.105)
+
+
+class TestStationServiceGetAllStations:
+    @pytest.mark.asyncio
+    async def test_returns_stations_with_current_scores_preserving_missing_stats(
+        self,
+        svc: StationService,
+        uow: MagicMock,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+    ):
+        station_ctx.stations.get_all = AsyncMock(return_value=[make_station("station-1"), make_station("station-2")])
+        click_ctx.stations.get_stations_stats_for_spot = AsyncMock(
+            return_value=[
+                None,
+                StationHourlyStats(
+                    weekday=1,
+                    hour=8,
+                    observations_count=10,
+                    fuel_available_ratio=0.8,
+                    queue_probability_when_known=0.5,
+                    queue_data_coverage_when_fuel=0.75,
+                    bad_queue_probability_when_known=0.25,
+                    avg_queue_severity_when_fuel=2.0,
+                    very_bad_queue_probability_when_known=0.1,
+                    service_unavailable_ratio=0.2,
+                ),
+            ]
+        )
+
+        with patch(
+            "app.services.station.get.now_utc",
+            return_value=datetime(2026, 7, 20, 8, tzinfo=timezone.utc),
+        ):
+            result = await svc.get_all_stations()
+
+        assert [station.id for station in result] == ["station-1", "station-2"]
+        assert result[0].score is None
+        assert result[0].confidence is None
+        assert result[1].score == pytest.approx(0.5475)
+        assert result[1].confidence == pytest.approx(0.575)
+        uow.begin.assert_called_once_with(write=False)
+        click_ctx.stations.get_stations_stats_for_spot.assert_awaited_once_with(
+            station_ids=["station-1", "station-2"],
+            hour=8,
+            weekday=1,
+        )
+
+    @pytest.mark.asyncio
+    async def test_skips_clickhouse_when_there_are_no_stations(
+        self,
+        svc: StationService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+    ):
+        station_ctx.stations.get_all = AsyncMock(return_value=[])
+        click_ctx.stations.get_stations_stats_for_spot = AsyncMock()
+
+        result = await svc.get_all_stations()
+
+        assert result == []
+        click_ctx.stations.get_stations_stats_for_spot.assert_not_awaited()
