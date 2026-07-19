@@ -72,6 +72,7 @@ def create_app() -> FastAPI:
         templates_dir="app/controllers/admin/templates",
     )
     station_map.StationMapView.map_url = settings.admin.map_url
+    station_map.StationMapView.uow = container.uow()  # type: ignore
     admin.add_view(station.StationView)
     admin.add_view(station_map.StationMapView)
     admin.add_view(state.IngestionPipelineStateView)

@@ -22,6 +22,11 @@ def _to_domain(model: StationModel) -> Station:
 
 
 class PgStationRepository(PostgresRepository):
+    async def get_all(self) -> list[Station]:
+        stmt = select(StationModel).order_by(StationModel.name, StationModel.id)
+        stations = await self._session.scalars(stmt)
+        return [_to_domain(station) for station in stations]
+
     async def get_by_id(self, id: str) -> Station | None:
         stmt = select(StationModel).where(StationModel.id == id)
         station = await self._session.scalar(stmt)

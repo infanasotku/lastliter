@@ -5,7 +5,8 @@ import pytest
 from mock import AsyncMock, MagicMock
 
 from app.controllers.admin.views.station import StationView
-from app.controllers.admin.views.station_map import StationMapView
+from app.controllers.admin.views.station_map import StationMapView, _get_origin
+from app.domains.station import Station
 
 
 def test_station_views_share_stations_category():
@@ -23,17 +24,65 @@ def test_station_views_share_stations_category():
 @pytest.mark.asyncio
 async def test_station_map_view_renders_iframe_page():
     view = StationMapView()
-    view.map_url = "https://map.example.test"
+    view.map_url = "https://map.example.test/app"
+    stations = [
+        Station(
+            id="station-1",
+            name="Test station",
+            address="Test address",
+            lat=54.99,
+            lon=82.98,
+        )
+    ]
+    context = SimpleNamespace(stations=SimpleNamespace(get_all=AsyncMock(return_value=stations)))
+    begin = MagicMock()
+    begin.__aenter__ = AsyncMock(return_value=context)
+    begin.__aexit__ = AsyncMock(return_value=None)
+    view.uow = SimpleNamespace(begin=MagicMock(return_value=begin))
     template_response = MagicMock()
     template_response_mock = AsyncMock(return_value=template_response)
     cast(Any, view).templates = SimpleNamespace(TemplateResponse=template_response_mock)
     request = MagicMock()
+    request.url_for.return_value = "https://admin.example.test/station/details/station-1"
 
     response = await view.station_map(request)
 
     assert response is template_response
+    view.uow.begin.assert_called_once_with(write=False)
+    context.stations.get_all.assert_awaited_once_with()
     template_response_mock.assert_awaited_once_with(
         request,
         "station_map.html",
-        {"map_url": "https://map.example.test"},
+        {
+            "map_url": "https://map.example.test/app",
+            "map_bridge_config": {
+                "mapOrigin": "https://map.example.test",
+                "context": {
+                    "type": "lastliter:admin-context",
+                    "version": 1,
+                    "mode": "admin",
+                    "capabilities": {"openStation": True},
+                    "stations": [
+                        {
+                            "id": "station-1",
+                            "name": "Test station",
+                            "address": "Test address",
+                            "latitude": 54.99,
+                            "longitude": 82.98,
+                        }
+                    ],
+                },
+                "stationDetailsUrls": {"station-1": "https://admin.example.test/station/details/station-1"},
+            },
+        },
     )
+
+
+def test_map_origin_uses_only_scheme_and_authority():
+    assert _get_origin("http://localhost:5173/map?q=1") == "http://localhost:5173"
+
+
+@pytest.mark.parametrize("url", ["localhost:5173", "ftp://map.example.test"])
+def test_map_origin_rejects_non_http_absolute_url(url: str):
+    with pytest.raises(ValueError):
+        _get_origin(url)

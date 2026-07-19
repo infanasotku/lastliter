@@ -49,8 +49,52 @@
 </style>
 
 <iframe
+  id="station-map-frame"
   class="station-map-frame"
   src="{{ map_url }}"
   title="Stations map"
 ></iframe>
+
+<script id="station-map-bridge-config" type="application/json">
+  {{ map_bridge_config | tojson }}
+</script>
+<script>
+  (() => {
+    const frame = document.getElementById("station-map-frame");
+    const { mapOrigin, context, stationDetailsUrls } = JSON.parse(
+      document.getElementById("station-map-bridge-config").textContent,
+    );
+
+    const sendContext = () => {
+      frame.contentWindow?.postMessage(context, mapOrigin);
+    };
+
+    window.addEventListener("message", (event) => {
+      if (event.origin !== mapOrigin || event.source !== frame.contentWindow) {
+        return;
+      }
+
+      if (
+        event.data?.type === "lastliter:map-ready" &&
+        event.data?.version === context.version
+      ) {
+        sendContext();
+        return;
+      }
+
+      if (
+        event.data?.type !== "lastliter:station-open" ||
+        event.data?.version !== context.version ||
+        typeof event.data?.stationId !== "string"
+      ) {
+        return;
+      }
+
+      const detailsUrl = stationDetailsUrls[event.data.stationId];
+      if (typeof detailsUrl === "string") {
+        window.location.assign(detailsUrl);
+      }
+    });
+  })();
+</script>
 {% endblock %}
