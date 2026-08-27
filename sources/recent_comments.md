@@ -5,6 +5,13 @@ curl 'https://gdebenz.ru/api/comments/474954443/recent?limit=12'
 ```json
 [
   {
+    "status": "yes",
+    "detail": "92,95",
+    "created_at": "2026-08-26 12:57:52",
+    "edited": false,
+    "svc": true
+  },
+  {
     "status": "queue",
     "detail": "92, ДТ · ≈ 5–20 машин",
     "created_at": "2026-07-04 05:11:15",
@@ -90,3 +97,7 @@ curl 'https://gdebenz.ru/api/comments/474954443/recent?limit=12'
   }
 ]
 ```
+
+Service-generated observations have `svc: true` and can omit both
+`author_reliable` and `on_site`. The ingestion client normalizes those missing
+fields to `false`.

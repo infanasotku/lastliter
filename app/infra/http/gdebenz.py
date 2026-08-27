@@ -81,7 +81,7 @@ class HTTPGdeBenzClient:
                 status=row["status"],
                 detail=row["detail"],
                 created_at=datetime.fromisoformat(row["created_at"]),
-                author_reliable=row["author_reliable"],
+                author_reliable=row.get("author_reliable", False),
                 on_site=row.get("on_site", False),
             )
 
