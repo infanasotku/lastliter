@@ -6,6 +6,36 @@ from app.infra.http.gdebenz import HTTPGdeBenzClient
 
 
 @pytest.mark.asyncio
+async def test_get_obs_by_id_defaults_missing_service_metadata_to_false():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/comments/12995781578/recent"
+        assert dict(request.url.params) == {"limit": "12", "fp": "test"}
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "status": "yes",
+                    "detail": "92,95",
+                    "created_at": "2026-08-26 12:57:52",
+                    "edited": False,
+                    "svc": True,
+                }
+            ],
+        )
+
+    client = HTTPGdeBenzClient(GdebenzSettings(fingerprint="test"))
+    await client._client.aclose()
+    client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    async with client._client:
+        observations = await client.get_obs_by_id("12995781578", limit=12)
+
+    assert len(observations) == 1
+    assert observations[0].author_reliable is False
+    assert observations[0].on_site is False
+
+
+@pytest.mark.asyncio
 async def test_get_station_by_shared_link_uses_nearby_and_filters_by_osm_id():
     share_html = """
         <script>
