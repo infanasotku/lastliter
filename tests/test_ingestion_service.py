@@ -168,6 +168,51 @@ class TestIngestionServiceRunIteration:
         )
 
     @pytest.mark.asyncio
+    async def test_clears_previous_error_after_successful_fetch(
+        self,
+        svc: IngestionService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        state = make_state("station-1")
+        state.error = "'author_reliable'"
+        station_ctx.states.claim_states = AsyncMock(return_value=[state])
+        station_ctx.states.update_claimed_states = AsyncMock(return_value=1)
+        gdebenz.get_obs_by_id = AsyncMock(return_value=[])
+
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
+
+        assert has_work is True
+        assert state.error is None
+        click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
+        station_ctx.states.update_claimed_states.assert_awaited_once_with(
+            [state], owner="worker-1", now=ANY, pipeline_type=PipelineType.FETCH_RAW
+        )
+
+    @pytest.mark.asyncio
+    async def test_handles_fetch_exception_with_empty_message(
+        self,
+        svc: IngestionService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+    ):
+        state = make_state("station-1")
+        station_ctx.states.claim_states = AsyncMock(return_value=[state])
+        station_ctx.states.update_claimed_states = AsyncMock(return_value=1)
+        gdebenz.get_obs_by_id = AsyncMock(side_effect=TimeoutError())
+
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
+
+        assert has_work is False
+        assert state.error == "TimeoutError"
+        click_ctx.stations.insert_raw_observations.assert_not_awaited()
+        station_ctx.states.update_claimed_states.assert_awaited_once_with(
+            [state], owner="worker-1", now=ANY, pipeline_type=PipelineType.FETCH_RAW
+        )
+
+    @pytest.mark.asyncio
     async def test_retries_individual_observations_when_bulk_clickhouse_insert_fails(
         self,
         svc: IngestionService,

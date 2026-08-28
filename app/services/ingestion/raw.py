@@ -67,14 +67,15 @@ class FetchRawObservationsUC(_IngestionIterationUC):
                     },
                 )
             except Exception as e:
+                error = str(e) or type(e).__name__
                 logger.error(
-                    f"Failed to fetch observations for station {state.station_id}: {e}",
-                    extra={"station_id": state.station_id, "error": str(e)},
+                    f"Failed to fetch observations for station {state.station_id}: {error}",
+                    extra={"station_id": state.station_id, "error": error},
                 )
 
-                state.mark_process_error(error=str(e), now=now_utc())
+                state.mark_process_error(error=error, now=now_utc())
 
-        failed_count = sum(1 for s in states if s.error)
+        failed_count = len(states) - len(station_obs_dict)
         observations_count = sum(len(station_obs.observations) for station_obs in station_obs_dict.values())
         logger.info(
             f"Finished fetching observations: {observations_count} observations, {failed_count} failed stations",
@@ -155,7 +156,7 @@ class FetchRawObservationsUC(_IngestionIterationUC):
 
     async def run(self, states: list[IngestionPipelineState]) -> None:
         obs = await self._fetch_observations(states)
-        self._hb_ctx.retain_active([s for s in states if not s.error])
+        self._hb_ctx.retain_active([state for state in states if state.station_id in obs])
         logger.info(
             f"Retained {len(self._hb_ctx.leased_states)} leased stations after fetch processing for owner {self.cmd.owner}",
             extra={
