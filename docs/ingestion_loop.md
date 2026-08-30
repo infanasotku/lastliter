@@ -99,6 +99,19 @@ Adjustment rules:
 - if a lease is lost mid-iteration, guarded Postgres feedback prevents stale owner updates
 - duplicate ClickHouse inserts are acceptable; reads must deduplicate immutable events
 
+## HTTP pacing
+
+- Raw station fetches reserve start times through an atomic Redis-backed leaky
+  bucket at 2 requests per second with up to 10% positive jitter.
+- At most 4 raw station requests may be in flight in one worker. HTTP latency is
+  overlapped without allowing an unbounded request backlog.
+- Redis server time prevents application-host clock skew, and the shared bucket
+  enforces one upstream request budget across all ingestion replicas.
+- The reservation key expires shortly after the outstanding request schedule
+  drains, so idle or retired limiter keys do not accumulate.
+- Redis errors fail ingestion requests closed so a Redis outage cannot bypass the
+  shared upstream limit.
+
 ## Key properties
 
 - no cursor / offset ingestion

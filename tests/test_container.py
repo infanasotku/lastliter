@@ -50,7 +50,7 @@ def test_infrastructure_dependencies_are_created_with_settings():
     ]
     clickhouse_factory.assert_called_once_with(settings.clickhouse)
     gdebenz_factory.assert_called_once_with(settings.gdebenz)
-    limiter_factory.assert_called_once_with()
+    limiter_factory.assert_called_once_with(redis)
 
 
 def test_postgres_and_clickhouse_dependencies_receive_infrastructure_resources():

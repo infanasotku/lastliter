@@ -14,6 +14,7 @@ from app.services.ingestion import IngestionService
 def station_ctx() -> MagicMock:
     ctx = MagicMock()
     ctx.states = MagicMock()
+    ctx.states.refresh_lease = AsyncMock(side_effect=lambda states, **_kwargs: len(states))
     return ctx
 
 
@@ -305,6 +306,39 @@ class TestIngestionServiceRunIteration:
         assert inserted[0].created_at == raw.created_at
         assert inserted[0].author_reliable is True
         assert inserted[0].on_site is False
+
+    @pytest.mark.asyncio
+    async def test_fetches_multiple_stations_concurrently_after_rate_limit_allows_them(
+        self,
+        svc: IngestionService,
+        station_ctx: MagicMock,
+        click_ctx: MagicMock,
+        gdebenz: MagicMock,
+        limiter: MagicMock,
+    ):
+        states = [make_state("station-1"), make_state("station-2")]
+        station_ctx.states.claim_states = AsyncMock(return_value=states)
+        station_ctx.states.update_claimed_states = AsyncMock(return_value=2)
+        both_started = asyncio.Event()
+        started = 0
+
+        async def get_obs_by_id(_station_id: str, *, limit: int):
+            nonlocal started
+            assert limit == 20
+            started += 1
+            if started == 2:
+                both_started.set()
+            await asyncio.wait_for(both_started.wait(), timeout=0.1)
+            return []
+
+        gdebenz.get_obs_by_id = AsyncMock(side_effect=get_obs_by_id)
+
+        has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
+
+        assert has_work is True
+        assert limiter.wait.await_count == 2
+        assert gdebenz.get_obs_by_id.await_count == 2
+        click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
 
     @pytest.mark.asyncio
     async def test_skips_clickhouse_when_heartbeat_loses_all_leases(

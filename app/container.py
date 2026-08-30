@@ -21,7 +21,7 @@ class Container(containers.DeclarativeContainer):
         create_redis_context,
         settings.provided.redis,
     )
-    limiter = providers.Singleton(RateLimiter)
+    limiter = providers.Singleton(RateLimiter, redis)
 
     # Postgres
     read_engine = providers.Singleton(create_engine, settings.provided.postgres, tx=False)
