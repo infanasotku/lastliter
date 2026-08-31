@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 from itertools import chain
 
@@ -24,6 +25,7 @@ logger = get_logger().getChild(__name__)
 
 LIMIT_KEY = KEY_PREFIX + "stations:fetch:limit"
 LIMIT_PER_SECOND = 2
+MAX_CONCURRENT_FETCHES = 4
 EVENTS_LIMIT_PER_STATION = 20
 
 
@@ -47,15 +49,20 @@ class FetchRawObservationsUC(_IngestionIterationUC):
 
     async def _fetch_observations(self, states: list[IngestionPipelineState]) -> dict[str, FetchRawStationObservations]:
         station_obs_dict: dict[str, FetchRawStationObservations] = {}
+        fetch_semaphore = asyncio.Semaphore(MAX_CONCURRENT_FETCHES)
         logger.info(
             f"Fetching observations for {len(states)} stations",
             extra={"stations_count": len(states), "station_ids": _station_ids(states)},
         )
 
-        for state in states:
+        async def _fetch_one(state: IngestionPipelineState) -> None:
             try:
-                await self._limiter.wait(key=LIMIT_KEY, limit_per_second=LIMIT_PER_SECOND)
-                observations = await self._gdebenz.get_obs_by_id(state.station_id, limit=EVENTS_LIMIT_PER_STATION)
+                async with fetch_semaphore:
+                    await self._limiter.wait(key=LIMIT_KEY, limit_per_second=LIMIT_PER_SECOND)
+                    observations = await self._gdebenz.get_obs_by_id(
+                        state.station_id,
+                        limit=EVENTS_LIMIT_PER_STATION,
+                    )
 
                 station_obs_dict[state.station_id] = FetchRawStationObservations(observations=observations)
                 logger.info(
@@ -74,6 +81,8 @@ class FetchRawObservationsUC(_IngestionIterationUC):
                 )
 
                 state.mark_process_error(error=error, now=now_utc())
+
+        await asyncio.gather(*(_fetch_one(state) for state in states))
 
         failed_count = len(states) - len(station_obs_dict)
         observations_count = sum(len(station_obs.observations) for station_obs in station_obs_dict.values())
