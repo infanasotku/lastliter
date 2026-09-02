@@ -11,7 +11,6 @@ from app.infra.common.time import now_utc
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging.logger import get_logger
 from app.infra.postgres.uows import IngestionReadContext, IngestionWriteContext
-from app.infra.redis.limit import RateLimiter
 from app.services.ingestion.base import _HeartbeatContext, _HeartbeatStatus, _IngestionIterationUC, _station_ids
 
 logger = get_logger().getChild(__name__)
@@ -27,13 +26,11 @@ class RunIngestionIterationUC:
         uow: UnitOfWork[IngestionReadContext, IngestionWriteContext],
         click_ctx: StationContext,
         gdebenz: HTTPGdeBenzClient,
-        limiter: RateLimiter,
     ):
         self.cmd = cmd
 
         self._uow = uow
         self._gdebenz = gdebenz
-        self._limiter = limiter
         self._click_ctx = click_ctx
 
     def _create_dependant_uc(self, hb_ctx: _HeartbeatContext) -> _IngestionIterationUC:
@@ -45,7 +42,6 @@ class RunIngestionIterationUC:
                     self.cmd,
                     click_ctx=self._click_ctx,
                     gdebenz=self._gdebenz,
-                    limiter=self._limiter,
                     hb_ctx=hb_ctx,
                 )
             case _:

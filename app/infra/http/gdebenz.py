@@ -9,6 +9,7 @@ from app.domains.station import Station
 from app.dto.ingestion import RawStationObservation
 from app.infra.common.time import now_utc
 from app.infra.config.gdebenz import GdebenzSettings
+from app.infra.redis.limit import RateLimiter
 
 BASE_URL = "https://www.gdebenz.ru"
 STATIONS_PATH = "/api/stations"
@@ -27,7 +28,7 @@ LON_RE = re.compile(r""""?lon"?\s*:\s*(?P<value>-?\d+(?:\.\d+)?)""")
 
 
 class HTTPGdeBenzClient:
-    def __init__(self, settings: GdebenzSettings) -> None:
+    def __init__(self, settings: GdebenzSettings, limiter: RateLimiter) -> None:
         self._client = httpx.AsyncClient(
             http2=True,
             headers={
@@ -35,6 +36,7 @@ class HTTPGdeBenzClient:
             },
         )
         self._settings = settings
+        self._limiter = limiter
 
     @staticmethod
     def _to_station(row: dict) -> Station:
@@ -70,6 +72,11 @@ class HTTPGdeBenzClient:
         return [self._to_station(row) for row in rows]
 
     async def get_obs_by_id(self, id: str, limit: int = 10) -> list[RawStationObservation]:
+        await self._limiter.wait(
+            key=self._settings.rate_limit_key,
+            limit_per_second=self._settings.rate_limit_per_second,
+        )
+
         url = f"{BASE_URL}{EVENTS_PATH.format(id=id, limit=limit, fingerprint=self._settings.fingerprint)}"
 
         r = await self._client.get(url)
@@ -151,7 +158,10 @@ class HTTPGdeBenzClient:
 
 
 @asynccontextmanager
-async def create_gdebenz_client(settings: GdebenzSettings) -> AsyncGenerator[HTTPGdeBenzClient]:
-    client = HTTPGdeBenzClient(settings=settings)
+async def create_gdebenz_client(
+    settings: GdebenzSettings,
+    limiter: RateLimiter,
+) -> AsyncGenerator[HTTPGdeBenzClient]:
+    client = HTTPGdeBenzClient(settings=settings, limiter=limiter)
     async with client._client:
         yield client

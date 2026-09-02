@@ -102,7 +102,14 @@ Adjustment rules:
 ## HTTP pacing
 
 - Raw station fetches reserve start times through an atomic Redis-backed leaky
-  bucket at 2 requests per second with up to 10% positive jitter.
+  bucket at the configured requests-per-second rate with up to 10% positive jitter.
+- Each Kubernetes egress pool runs as its own Deployment. Pods in one pool share
+  a limiter key derived from the pool's canonical expected public IP, while a
+  different public IP receives an independent request budget.
+- The first configured pool may retain the existing `loop` resource name during
+  migration; additional pools use distinct resource names such as `loop-home`.
+- Deployments use required node placement and `Recreate` updates to avoid mixing
+  old and new pods within one public-IP budget.
 - At most 4 raw station requests may be in flight in one worker. HTTP latency is
   overlapped without allowing an unbounded request backlog.
 - Redis server time prevents application-host clock skew, and the shared bucket

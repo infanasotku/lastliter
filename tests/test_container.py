@@ -49,8 +49,8 @@ def test_infrastructure_dependencies_are_created_with_settings():
         ((settings.postgres,), {"tx": True}),
     ]
     clickhouse_factory.assert_called_once_with(settings.clickhouse)
-    gdebenz_factory.assert_called_once_with(settings.gdebenz)
     limiter_factory.assert_called_once_with(redis)
+    gdebenz_factory.assert_called_once_with(settings.gdebenz, limiter)
 
 
 def test_postgres_and_clickhouse_dependencies_receive_infrastructure_resources():
@@ -85,11 +85,9 @@ def test_services_receive_all_dependencies():
     container = Container()
     uow = object()
     gdebenz = object()
-    limiter = object()
     station_ctx = object()
     container.uow.override(providers.Object(uow))
     container.gdebenz.override(providers.Object(gdebenz))
-    container.limiter.override(providers.Object(limiter))
     container.station_ctx.override(providers.Object(station_ctx))
 
     station_service = container.station_service()
@@ -102,5 +100,4 @@ def test_services_receive_all_dependencies():
     assert isinstance(ingestion_service, IngestionService)
     assert ingestion_service._uow is uow
     assert ingestion_service._gdebenz is gdebenz
-    assert ingestion_service._limiter is limiter
     assert ingestion_service._click_ctx is station_ctx

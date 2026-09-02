@@ -1,5 +1,52 @@
-{{ include "common.config" . }}
+{{- $pools := required "loop.egressPools must contain at least one pool" .Values.egressPools -}}
+{{- $seenNames := dict -}}
+{{- $seenResources := dict -}}
+{{- $seenIPs := dict -}}
+{{- $rendered := false -}}
+{{- range $pool := $pools -}}
+  {{- $enabled := true -}}
+  {{- if hasKey $pool "enabled" -}}
+    {{- $enabled = $pool.enabled -}}
+  {{- end -}}
+  {{- if $enabled -}}
+    {{- $poolName := required "each loop egress pool requires name" $pool.name -}}
+    {{- $resourceName := default (printf "%s-%s" $.Release.Name $poolName) $pool.resourceName -}}
+    {{- $publicIP := required (printf "loop egress pool %s requires expectedPublicIp" $poolName) $pool.expectedPublicIp -}}
+    {{- $nodeSelector := required (printf "loop egress pool %s requires nodeSelector" $poolName) $pool.nodeSelector -}}
+    {{- if hasKey $seenNames $poolName -}}
+      {{- fail (printf "duplicate loop egress pool name: %s" $poolName) -}}
+    {{- end -}}
+    {{- if hasKey $seenResources $resourceName -}}
+      {{- fail (printf "duplicate loop egress pool resourceName: %s" $resourceName) -}}
+    {{- end -}}
+    {{- if hasKey $seenIPs $publicIP -}}
+      {{- fail (printf "duplicate enabled loop egress public IP: %s" $publicIP) -}}
+    {{- end -}}
+    {{- $_ := set $seenNames $poolName true -}}
+    {{- $_ := set $seenResources $resourceName true -}}
+    {{- $_ := set $seenIPs $publicIP true -}}
+    {{- $ctx := deepCopy $ -}}
+    {{- $_ = set $ctx.Values "nameOverride" $resourceName -}}
+    {{- $_ = set $ctx.Values "replicaCount" (default 1 $pool.replicaCount) -}}
+    {{- $_ = set $ctx.Values "nodeSelector" $nodeSelector -}}
+    {{- $_ = set $ctx.Values "strategy" (dict "type" "Recreate") -}}
+    {{- $_ = set $ctx.Values "podLabels" (dict "lastliter.io/gdebenz-egress-pool" $poolName) -}}
+    {{- $config := deepCopy $ctx.Values.config -}}
+    {{- $_ = set $config "GDEBENZ__EGRESS_POOL_ID" $poolName -}}
+    {{- $_ = set $config "GDEBENZ__EXPECTED_PUBLIC_IP" $publicIP -}}
+    {{- $_ = set $config "GDEBENZ__RATE_LIMIT_PER_SECOND" (default 2 $pool.rateLimitPerSecond) -}}
+    {{- $_ = set $ctx.Values "config" $config -}}
+    {{- if $rendered }}
 ---
-{{ include "common.secrets" . }}
+    {{- end }}
+{{ include "common.config" $ctx }}
 ---
-{{ include "common.deployment" . }}
+{{ include "common.secrets" $ctx }}
+---
+{{ include "common.deployment" $ctx }}
+    {{- $rendered = true -}}
+  {{- end -}}
+{{- end -}}
+{{- if not $rendered -}}
+  {{- fail "loop.egressPools must enable at least one pool" -}}
+{{- end -}}
