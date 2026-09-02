@@ -44,7 +44,7 @@ class Container(containers.DeclarativeContainer):
     station_ctx = providers.Singleton(ClickStationContext, clickhouse_client)
 
     # HTTP
-    gdebenz = providers.Resource(create_gdebenz_client, settings.provided.gdebenz)
+    gdebenz = providers.Resource(create_gdebenz_client, settings.provided.gdebenz, limiter)
 
     # Svc
     station_service = providers.Factory(
@@ -57,6 +57,5 @@ class Container(containers.DeclarativeContainer):
         IngestionService,
         uow,
         gdebenz=gdebenz,
-        limiter=limiter,
         click_ctx=station_ctx,
     )

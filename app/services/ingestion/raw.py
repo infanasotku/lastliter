@@ -13,8 +13,6 @@ from app.infra.clickhouse.repositories import StationContext
 from app.infra.common.time import now_utc
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 from app.infra.logging.logger import get_logger
-from app.infra.redis.common import KEY_PREFIX
-from app.infra.redis.limit import RateLimiter
 from app.services.ingestion.base import (
     _HeartbeatContext,
     _IngestionIterationUC,
@@ -23,8 +21,6 @@ from app.services.ingestion.base import (
 
 logger = get_logger().getChild(__name__)
 
-LIMIT_KEY = KEY_PREFIX + "stations:fetch:limit"
-LIMIT_PER_SECOND = 2
 MAX_CONCURRENT_FETCHES = 4
 EVENTS_LIMIT_PER_STATION = 20
 
@@ -37,12 +33,10 @@ class FetchRawObservationsUC(_IngestionIterationUC):
         hb_ctx: _HeartbeatContext,
         click_ctx: StationContext,
         gdebenz: HTTPGdeBenzClient,
-        limiter: RateLimiter,
     ):
         self.cmd = cmd
 
         self._gdebenz = gdebenz
-        self._limiter = limiter
         self._click_ctx = click_ctx
 
         self._hb_ctx = hb_ctx
@@ -58,7 +52,6 @@ class FetchRawObservationsUC(_IngestionIterationUC):
         async def _fetch_one(state: IngestionPipelineState) -> None:
             try:
                 async with fetch_semaphore:
-                    await self._limiter.wait(key=LIMIT_KEY, limit_per_second=LIMIT_PER_SECOND)
                     observations = await self._gdebenz.get_obs_by_id(
                         state.station_id,
                         limit=EVENTS_LIMIT_PER_STATION,

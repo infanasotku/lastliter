@@ -3,8 +3,16 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "common.fullname" . }}
+  labels:
+    app: {{ include "common.fullname" . }}
+    {{- with .Values.podLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   replicas: {{ .Values.replicaCount | default 1 }}
+  {{- with .Values.strategy }}
+  strategy: {{ toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels: {app: {{ include "common.fullname" . }}}
   template:
@@ -12,12 +20,24 @@ spec:
       labels:
         app: {{ include "common.fullname" . }}
         environment: {{ .Values.environment }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       annotations:
         rollout/timestamp: {{ now | quote }}
     spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Values.container.name }}
           image: {{ .Values.container.image }}:{{ .Values.container.tag }}

@@ -1,1 +1,8 @@
-replicaCount: 1
+egressPools:
+  - name: yc
+    resourceName: loop
+    expectedPublicIp: 158.160.194.130
+    rateLimitPerSecond: 2
+    replicaCount: 1
+    nodeSelector:
+      kubernetes.io/hostname: infanasotku-yc-1

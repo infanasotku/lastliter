@@ -1,12 +1,20 @@
 import httpx
 import pytest
+from mock import AsyncMock, MagicMock
 
 from app.infra.config.gdebenz import GdebenzSettings
 from app.infra.http.gdebenz import HTTPGdeBenzClient
 
 
+@pytest.fixture()
+def limiter() -> MagicMock:
+    limiter = MagicMock()
+    limiter.wait = AsyncMock()
+    return limiter
+
+
 @pytest.mark.asyncio
-async def test_get_obs_by_id_defaults_missing_service_metadata_to_false():
+async def test_get_obs_by_id_defaults_missing_service_metadata_to_false(limiter: MagicMock):
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/comments/12995781578/recent"
         assert dict(request.url.params) == {"limit": "12", "fp": "test"}
@@ -23,20 +31,29 @@ async def test_get_obs_by_id_defaults_missing_service_metadata_to_false():
             ],
         )
 
-    client = HTTPGdeBenzClient(GdebenzSettings(fingerprint="test"))
+    settings = GdebenzSettings(
+        fingerprint="test",
+        expected_public_ip="203.0.113.10",
+        rate_limit_per_second=3,
+    )
+    client = HTTPGdeBenzClient(settings, limiter)
     await client._client.aclose()
     client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
     async with client._client:
         observations = await client.get_obs_by_id("12995781578", limit=12)
 
+    limiter.wait.assert_awaited_once_with(
+        key="lastliter:gdebenz:request-start:v2:egress:203.0.113.10",
+        limit_per_second=3,
+    )
     assert len(observations) == 1
     assert observations[0].author_reliable is False
     assert observations[0].on_site is False
 
 
 @pytest.mark.asyncio
-async def test_get_station_by_shared_link_uses_nearby_and_filters_by_osm_id():
+async def test_get_station_by_shared_link_uses_nearby_and_filters_by_osm_id(limiter: MagicMock):
     share_html = """
         <script>
           window.SHARE_STATION = {
@@ -80,7 +97,7 @@ async def test_get_station_by_shared_link_uses_nearby_and_filters_by_osm_id():
             },
         )
 
-    client = HTTPGdeBenzClient(GdebenzSettings(fingerprint="test"))
+    client = HTTPGdeBenzClient(GdebenzSettings(fingerprint="test"), limiter)
     await client._client.aclose()
     client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
@@ -95,7 +112,7 @@ async def test_get_station_by_shared_link_uses_nearby_and_filters_by_osm_id():
 
 
 @pytest.mark.asyncio
-async def test_get_station_by_shared_link_parses_json_style_share_station_script():
+async def test_get_station_by_shared_link_parses_json_style_share_station_script(limiter: MagicMock):
     share_html = """
         <meta name="gb-build" content="15e1d51|1783960536|0|app.f13e56f6520c.js">
         <script>window.SHARE_STATION={"osm_id": "12995781578", "lat": 54.8752569, "lon": 83.076535, "name": "Газпромнефть", "addr": "Бердское шоссе, 470", "snapshot": {"status": "no", "fuels_now": "", "confirmations": 33, "created_at": "2026-07-13 17:13:48"}};</script>
@@ -127,7 +144,7 @@ async def test_get_station_by_shared_link_parses_json_style_share_station_script
             },
         )
 
-    client = HTTPGdeBenzClient(GdebenzSettings(fingerprint="test"))
+    client = HTTPGdeBenzClient(GdebenzSettings(fingerprint="test"), limiter)
     await client._client.aclose()
     client._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
 

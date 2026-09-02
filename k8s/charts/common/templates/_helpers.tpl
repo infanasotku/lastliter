@@ -1,1 +1,1 @@
-{{- define "common.fullname" -}}{{ .Release.Name | trunc 63 }}{{- end }}
+{{- define "common.fullname" -}}{{ default .Release.Name .Values.nameOverride | trunc 63 }}{{- end }}

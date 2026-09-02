@@ -46,19 +46,15 @@ def click_ctx() -> MagicMock:
 
 
 @fixture()
-def limiter() -> MagicMock:
-    limiter = MagicMock()
-    limiter.wait = AsyncMock()
-    return limiter
-
-
-@fixture()
-def svc(uow: MagicMock, click_ctx: MagicMock, gdebenz: MagicMock, limiter: MagicMock) -> IngestionService:
+def svc(
+    uow: MagicMock,
+    click_ctx: MagicMock,
+    gdebenz: MagicMock,
+) -> IngestionService:
     return IngestionService(
         uow,
         click_ctx=click_ctx,
         gdebenz=gdebenz,
-        limiter=limiter,
     )
 
 
@@ -90,7 +86,6 @@ class TestIngestionServiceRunIteration:
         station_ctx: MagicMock,
         click_ctx: MagicMock,
         gdebenz: MagicMock,
-        limiter: MagicMock,
     ):
         station_ctx.states.claim_states = AsyncMock(return_value=[])
         station_ctx.states.update_claimed_states = AsyncMock()
@@ -105,7 +100,6 @@ class TestIngestionServiceRunIteration:
             claim_for=timedelta(minutes=5),
             pipeline_type=PipelineType.FETCH_RAW,
         )
-        limiter.wait.assert_not_awaited()
         gdebenz.get_obs_by_id.assert_not_awaited()
         click_ctx.stations.insert_raw_observations.assert_not_awaited()
         station_ctx.states.update_claimed_states.assert_not_awaited()
@@ -273,13 +267,12 @@ class TestIngestionServiceRunIteration:
         )
 
     @pytest.mark.asyncio
-    async def test_inserts_normalized_observation_and_rate_limits_each_station(
+    async def test_inserts_normalized_observation(
         self,
         svc: IngestionService,
         station_ctx: MagicMock,
         click_ctx: MagicMock,
         gdebenz: MagicMock,
-        limiter: MagicMock,
     ):
         state = make_state("station-1")
         raw = RawStationObservation(
@@ -296,7 +289,6 @@ class TestIngestionServiceRunIteration:
         has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is True
-        limiter.wait.assert_awaited_once_with(key="lastliter:stations:fetch:limit", limit_per_second=2)
         gdebenz.get_obs_by_id.assert_awaited_once_with("station-1", limit=20)
         inserted = click_ctx.stations.insert_raw_observations.await_args.args[0]
         assert len(inserted) == 1
@@ -314,7 +306,6 @@ class TestIngestionServiceRunIteration:
         station_ctx: MagicMock,
         click_ctx: MagicMock,
         gdebenz: MagicMock,
-        limiter: MagicMock,
     ):
         states = [make_state("station-1"), make_state("station-2")]
         station_ctx.states.claim_states = AsyncMock(return_value=states)
@@ -336,7 +327,6 @@ class TestIngestionServiceRunIteration:
         has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
         assert has_work is True
-        assert limiter.wait.await_count == 2
         assert gdebenz.get_obs_by_id.await_count == 2
         click_ctx.stations.insert_raw_observations.assert_awaited_once_with([])
 
@@ -347,18 +337,18 @@ class TestIngestionServiceRunIteration:
         station_ctx: MagicMock,
         click_ctx: MagicMock,
         gdebenz: MagicMock,
-        limiter: MagicMock,
     ):
         state = make_state("station-1")
         station_ctx.states.claim_states = AsyncMock(return_value=[state])
         station_ctx.states.refresh_lease = AsyncMock(return_value=0)
         station_ctx.states.update_claimed_states = AsyncMock()
-        gdebenz.get_obs_by_id = AsyncMock(return_value=[])
 
-        async def yield_to_heartbeat(**_kwargs):
+        async def yield_to_heartbeat(_station_id: str, *, limit: int):
+            assert limit == 20
             await asyncio.sleep(0)
+            return []
 
-        limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
+        gdebenz.get_obs_by_id = AsyncMock(side_effect=yield_to_heartbeat)
 
         has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
@@ -375,7 +365,6 @@ class TestIngestionServiceRunIteration:
         station_ctx: MagicMock,
         click_ctx: MagicMock,
         gdebenz: MagicMock,
-        limiter: MagicMock,
     ):
         retained_state = make_state("station-1")
         lost_state = make_state("station-2")
@@ -390,12 +379,13 @@ class TestIngestionServiceRunIteration:
         station_ctx.states.refresh_lease = AsyncMock(return_value=1)
         station_ctx.states.get_claimed = AsyncMock(return_value=[retained_state])
         station_ctx.states.update_claimed_states = AsyncMock(return_value=1)
-        gdebenz.get_obs_by_id = AsyncMock(return_value=[raw])
 
-        async def yield_to_heartbeat(**_kwargs):
+        async def yield_to_heartbeat(_station_id: str, *, limit: int):
+            assert limit == 20
             await asyncio.sleep(0)
+            return [raw]
 
-        limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
+        gdebenz.get_obs_by_id = AsyncMock(side_effect=yield_to_heartbeat)
 
         has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
@@ -413,18 +403,18 @@ class TestIngestionServiceRunIteration:
         station_ctx: MagicMock,
         click_ctx: MagicMock,
         gdebenz: MagicMock,
-        limiter: MagicMock,
     ):
         state = make_state("station-1")
         station_ctx.states.claim_states = AsyncMock(return_value=[state])
         station_ctx.states.refresh_lease = AsyncMock(side_effect=RuntimeError("postgres unavailable"))
         station_ctx.states.update_claimed_states = AsyncMock()
-        gdebenz.get_obs_by_id = AsyncMock(return_value=[])
 
-        async def yield_to_heartbeat(**_kwargs):
+        async def yield_to_heartbeat(_station_id: str, *, limit: int):
+            assert limit == 20
             await asyncio.sleep(0)
+            return []
 
-        limiter.wait = AsyncMock(side_effect=yield_to_heartbeat)
+        gdebenz.get_obs_by_id = AsyncMock(side_effect=yield_to_heartbeat)
 
         has_work = await svc.run_ingestion_iteration(make_ingestion_cmd())
 
